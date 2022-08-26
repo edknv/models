@@ -100,10 +100,7 @@ class DualEncoderBlock(ParallelBlock):
         self._query_block = TowerBlock(query_block)
         self._item_block = TowerBlock(item_block)
 
-        branches = {
-            "query": Filter(query_block.schema).connect(self._query_block),
-            "item": Filter(item_block.schema).connect(self._item_block),
-        }
+        branches = {"query": self._query_block, "item": self._item_block}
 
         super().__init__(
             branches,
@@ -113,6 +110,7 @@ class DualEncoderBlock(ParallelBlock):
             schema=schema,
             name=name,
             strict=strict,
+            pre_filter_features=True,
             **kwargs,
         )
 
