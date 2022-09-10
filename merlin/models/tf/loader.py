@@ -506,11 +506,11 @@ class Loader(tf.keras.utils.Sequence, DataLoader):
     def _handle_tensors(self, cats, conts, labels):
         to_return = super()._handle_tensors(cats, conts, labels)
 
-        if labels > 1 and self.multi_label_as_dict:
+        if len(self.label_names) > 1 and self.multi_label_as_dict:
             X, y = to_return
             to_return = X, dict(zip(self.label_names, y))
 
-        for transform in self._transforms:
+        for _, transform in self._transforms:
             to_return = transform(*to_return)
 
         return to_return
