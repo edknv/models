@@ -82,6 +82,7 @@ from merlin.models.tf.core.combinators import (
     ResidualBlock,
     SequentialBlock,
 )
+from merlin.models.tf.core.encoder import EncoderBlock
 from merlin.models.tf.data_augmentation.noise import StochasticSwapNoise
 from merlin.models.tf.inputs.base import InputBlock, InputBlockV2
 from merlin.models.tf.inputs.continuous import ContinuousFeatures
@@ -125,6 +126,7 @@ from merlin.models.tf.prediction_tasks.regression import RegressionTask
 from merlin.models.tf.prediction_tasks.retrieval import ItemRetrievalTask
 from merlin.models.tf.predictions.base import PredictionBlock
 from merlin.models.tf.predictions.classification import BinaryPrediction, CategoricalPrediction
+from merlin.models.tf.predictions.dot_product import DotProductCategoricalPrediction
 from merlin.models.tf.predictions.regression import RegressionPrediction
 from merlin.models.tf.predictions.sampling.base import Items, ItemSamplerV2
 from merlin.models.tf.predictions.sampling.in_batch import InBatchSamplerV2
@@ -150,6 +152,7 @@ __all__ = [
     "SequentialBlock",
     "ResidualBlock",
     "DualEncoderBlock",
+    "EncoderBlock",
     "CrossBlock",
     "DLRMBlock",
     "MLPBlock",
@@ -194,6 +197,7 @@ __all__ = [
     "BinaryPrediction",
     "RegressionPrediction",
     "CategoricalPrediction",
+    "DotProductCategoricalPrediction",
     "PredictionTask",
     "BinaryClassificationTask",
     "MultiClassClassificationTask",
