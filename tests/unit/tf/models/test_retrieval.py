@@ -349,10 +349,7 @@ def test_youtube_dnn_retrieval(sequence_testing_data: Dataset):
     )
     model.compile(optimizer="adam", run_eagerly=False)
 
-    as_ragged = mm.AsRaggedFeatures()
-
     def last_interaction_as_target(inputs, targets):
-        inputs = as_ragged(inputs)
         items = inputs["item_id_seq"]
         _items = items[:, :-1]
         targets = items[:, -1:].flat_values
@@ -361,7 +358,7 @@ def test_youtube_dnn_retrieval(sequence_testing_data: Dataset):
 
         return inputs, targets
 
-    dataloader = mm.Loader(sequence_testing_data, batch_size=50)
+    dataloader = mm.Loader(sequence_testing_data, batch_size=50, transforms=[mm.AsRaggedFeatures()])
     dataloader = dataloader.map(last_interaction_as_target)
 
     losses = model.fit(dataloader, epochs=1)

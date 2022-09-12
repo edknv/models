@@ -17,6 +17,7 @@
 import tempfile
 
 import numpy as np
+import pandas as pd
 import pytest
 import tensorflow as tf
 from tensorflow.test import TestCase
@@ -26,7 +27,7 @@ from merlin.io import Dataset
 from merlin.models.tf.core.combinators import ParallelBlock, TabularBlock
 from merlin.models.tf.utils import testing_utils
 from merlin.models.utils.schema_utils import create_categorical_column
-from merlin.schema import Schema, Tags
+from merlin.schema import ColumnSchema, Schema, Tags
 
 
 def test_expand_dims_same_axis():
@@ -813,3 +814,42 @@ def test_hashedcrossall_in_model(ecommerce_data: Dataset, run_eagerly):
     model = ml.Model(body, ml.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
+
+
+def test_to_target_loader():
+    schema = Schema(
+        [
+            ColumnSchema("a", tags=[Tags.ITEM, Tags.CATEGORICAL]),
+            ColumnSchema("b", tags=[Tags.USER, Tags.CATEGORICAL]),
+            ColumnSchema("c", tags=[Tags.CATEGORICAL]),
+        ]
+    )
+
+    input_df = pd.DataFrame(
+        [
+            {"a": 1, "b": 2, "c": 3},
+            {"a": 4, "b": 5, "c": 6},
+        ]
+    )
+    input_df = input_df[sorted(input_df.columns)]
+    dataset = Dataset(input_df, schema=schema)
+    loader = ml.Loader(dataset, batch_size=10, transforms=[ml.ToTarget(schema, "c")])
+    batch = next(iter(loader))
+
+    assert sorted(batch.outputs.keys()) == ["a", "b"]
+    assert sorted(batch.targets.keys()) == ["c"]
+    assert batch.targets["c"].numpy().tolist() == [[3], [6]]
+    assert loader.output_schema.select_by_tag(Tags.TARGET).column_names == ["c"]
+
+
+def test_to_target_compute_output_schema():
+    schema = Schema(
+        [
+            ColumnSchema("a", tags=[Tags.ITEM, Tags.CATEGORICAL]),
+            ColumnSchema("b", tags=[Tags.USER, Tags.CATEGORICAL]),
+            ColumnSchema("label", tags=[Tags.CATEGORICAL]),
+        ]
+    )
+    to_target = ml.ToTarget(schema, "label")
+    output_schema = to_target.compute_output_schema(schema)
+    assert "label" in output_schema.select_by_tag(Tags.TARGET).column_names

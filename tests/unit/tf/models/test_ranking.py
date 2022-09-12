@@ -85,8 +85,7 @@ def test_dlrm_model_with_sample_weights_and_weighted_metrics(music_streaming_dat
         sample_weight = tf.cast(features.pop(sample_weight_col_name), tf.float32)
         return features, labels, sample_weight
 
-    batched_ds = ml.Loader(music_streaming_data, batch_size=10)
-    batched_ds = batched_ds.map(add_sample_weight)
+    batched_ds = ml.Loader(music_streaming_data, batch_size=10, transforms=[add_sample_weight])
     batch = next(iter(batched_ds))
 
     model = ml.DLRMModel(

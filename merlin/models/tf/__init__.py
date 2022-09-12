@@ -29,6 +29,7 @@ from merlin.models.tf.core.transformations import (
     HashedCross,
     HashedCrossAll,
     LabelToOneHot,
+    ToTarget,
 )
 
 configure_tensorflow()
