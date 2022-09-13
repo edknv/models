@@ -22,7 +22,7 @@ import pytest
 import tensorflow as tf
 from tensorflow.test import TestCase
 
-import merlin.models.tf as ml
+import merlin.models.tf as mm
 from merlin.io import Dataset
 from merlin.models.tf.core.combinators import ParallelBlock, TabularBlock
 from merlin.models.tf.utils import testing_utils
@@ -38,11 +38,11 @@ def test_expand_dims_same_axis():
     inputs = {
         "cont_feat": tf.random.uniform((NUM_ROWS,)),
         "multi_hot_categ_feat": tf.random.uniform(
-            (NUM_ROWS, 4), minval=1, maxval=100, dtype=tf.int32
+            (NUM_ROWS, 4), minval=1, maxval=100, dtype=np.int32
         ),
     }
 
-    expand_dims_op = ml.ExpandDims(expand_dims=-1)
+    expand_dims_op = mm.ExpandDims(expand_dims=-1)
     expanded_inputs = expand_dims_op(inputs)
 
     assert inputs.keys() == expanded_inputs.keys()
@@ -59,11 +59,11 @@ def test_expand_dims_axis_as_dict():
         "cont_feat1": tf.random.uniform((NUM_ROWS,)),
         "cont_feat2": tf.random.uniform((NUM_ROWS,)),
         "multi_hot_categ_feat": tf.random.uniform(
-            (NUM_ROWS, 4), minval=1, maxval=100, dtype=tf.int32
+            (NUM_ROWS, 4), minval=1, maxval=100, dtype=np.int32
         ),
     }
 
-    expand_dims_op = ml.ExpandDims(expand_dims={"cont_feat2": 0, "multi_hot_categ_feat": 1})
+    expand_dims_op = mm.ExpandDims(expand_dims={"cont_feat2": 0, "multi_hot_categ_feat": 1})
     expanded_inputs = expand_dims_op(inputs)
 
     assert inputs.keys() == expanded_inputs.keys()
@@ -77,10 +77,10 @@ def test_expand_dims_axis_as_dict():
 def test_categorical_encoding_as_pre(ecommerce_data: Dataset, run_eagerly):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     body = ParallelBlock(
-        TabularBlock.from_schema(schema=schema, pre=ml.CategoryEncoding(schema)),
+        TabularBlock.from_schema(schema=schema, pre=mm.CategoryEncoding(schema)),
         is_input=True,
-    ).connect(ml.MLPBlock([32]))
-    model = ml.Model(body, ml.BinaryClassificationTask("click"))
+    ).connect(mm.MLPBlock([32]))
+    model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
@@ -89,11 +89,11 @@ def test_categorical_encoding_as_pre(ecommerce_data: Dataset, run_eagerly):
 def test_categorical_encoding_in_model(ecommerce_data: Dataset, run_eagerly):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     branches = {
-        "one_hot": ml.CategoryEncoding(schema, is_input=True),
-        "features": ml.InputBlock(ecommerce_data.schema),
+        "one_hot": mm.CategoryEncoding(schema, is_input=True),
+        "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(ml.MLPBlock([32]))
-    model = ml.Model(body, ml.BinaryClassificationTask("click"))
+    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([32]))
+    model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
@@ -116,10 +116,10 @@ def test_popularity_logits_correct():
 
     logits = tf.random.uniform((NUM_ROWS, NUM_SAMPLE))
     negative_item_ids = tf.random.uniform(
-        (NUM_SAMPLE - 1,), minval=1, maxval=NUM_ITEMS, dtype=tf.int32
+        (NUM_SAMPLE - 1,), minval=1, maxval=NUM_ITEMS, dtype=np.int32
     )
-    positive_item_ids = tf.random.uniform((NUM_ROWS,), minval=1, maxval=NUM_ITEMS, dtype=tf.int32)
-    item_frequency = tf.sort(tf.random.uniform((NUM_ITEMS,), minval=0, maxval=1000, dtype=tf.int32))
+    positive_item_ids = tf.random.uniform((NUM_ROWS,), minval=1, maxval=NUM_ITEMS, dtype=np.int32)
+    item_frequency = tf.sort(tf.random.uniform((NUM_ITEMS,), minval=0, maxval=1000, dtype=np.int32))
 
     inputs = PredictionOutput(
         predictions=logits,
@@ -179,14 +179,14 @@ def test_items_weight_tying_with_different_domain_name():
         ]
     )
     inputs = {
-        "item_id": tf.random.uniform((NUM_ROWS, 1), minval=1, maxval=101, dtype=tf.int32),
-        "target": tf.random.uniform((NUM_ROWS, 1), minval=0, maxval=10, dtype=tf.int32),
+        "item_id": tf.random.uniform((NUM_ROWS, 1), minval=1, maxval=101, dtype=np.int32),
+        "target": tf.random.uniform((NUM_ROWS, 1), minval=0, maxval=10, dtype=np.int32),
     }
 
     weight_tying_block = ItemsPredictionWeightTying(schema=schema)
-    input_block = ml.InputBlock(schema)
-    task = ml.MultiClassClassificationTask("target")
-    model = ml.Model(input_block, ml.MLPBlock([64]), weight_tying_block, task)
+    input_block = mm.InputBlock(schema)
+    task = mm.MultiClassClassificationTask("target")
+    model = mm.Model(input_block, mm.MLPBlock([64]), weight_tying_block, task)
 
     _ = model(inputs)
     weight_tying_embeddings = model.blocks[2].context.get_embedding("joint_item_id")
@@ -204,7 +204,7 @@ def test_hashedcross_int():
     inputs = {}
     inputs["cat1"] = tf.constant(["A", "B"])
     inputs["cat2"] = tf.constant([101, 102])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=10, output_mode="int")
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=10, output_mode="int")
     outputs = hashed_cross_op(inputs)
     output_name, output_value = outputs.popitem()
 
@@ -224,7 +224,7 @@ def test_hashedcross_1d():
     inputs = {}
     inputs["cat1"] = tf.constant(["A", "B", "A", "B", "A"])
     inputs["cat2"] = tf.constant([101, 101, 101, 102, 102])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=10, output_mode="int")
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=10, output_mode="int")
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
 
@@ -243,7 +243,7 @@ def test_hashedcross_2d():
     inputs = {}
     inputs["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [101], [101], [102], [102]])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=10, output_mode="int")
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=10, output_mode="int")
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
 
@@ -261,7 +261,7 @@ def test_hashedcross_output_shape():
     inputs_shape = {}
     inputs_shape["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]]).shape
     inputs_shape["cat2"] = tf.constant([[101], [101], [101], [102], [102]]).shape
-    hashed_cross = ml.HashedCross(schema=schema, num_bins=10, output_mode="int")
+    hashed_cross = mm.HashedCross(schema=schema, num_bins=10, output_mode="int")
     outputs = hashed_cross.compute_output_shape(inputs_shape)
     _, output_shape = outputs.popitem()
 
@@ -279,7 +279,7 @@ def test_hashedcross_output_shape_one_hot():
     inputs_shape["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]]).shape
     inputs_shape["cat2"] = tf.constant([[101], [101], [101], [102], [102]]).shape
     output_name = "cross_out"
-    hashed_cross = ml.HashedCross(
+    hashed_cross = mm.HashedCross(
         schema=schema, num_bins=10, output_mode="one_hot", output_name=output_name
     )
     outputs = hashed_cross.compute_output_shape(inputs_shape)
@@ -299,7 +299,7 @@ def test_hashedcross_less_bins():
     inputs = {}
     inputs["cat1"] = tf.constant([["A"], ["B"], ["C"], ["D"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [102], [101], [101], [101], [102], [103]])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=True)
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=True)
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
     output_value = tf.sparse.to_dense(output_value)
@@ -318,13 +318,13 @@ def test_hashedcross_output_mode():
     inputs["cat1"] = tf.constant([["A"], ["B"], ["C"], ["D"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [102], [101], [101], [101], [102], [103]])
 
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=True)
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=True)
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
     assert isinstance(output_value, tf.SparseTensor) is True
     assert output_value.shape.as_list() == [7, 4]
 
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=False)
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=4, output_mode="one_hot", sparse=False)
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
     assert isinstance(output_value, tf.Tensor) is True
@@ -343,7 +343,7 @@ def test_hashedcross_onehot_output():
     inputs = {}
     inputs["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [101], [101], [102], [102]])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=5, output_mode="one_hot", sparse=True)
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=5, output_mode="one_hot", sparse=True)
     outputs = hashed_cross_op(inputs)
     _, output_value = outputs.popitem()
     output_value = tf.sparse.to_dense(output_value)
@@ -365,7 +365,7 @@ def test_hashedcross_single_input_fails():
     test_case = TestCase()
     schema = Schema([create_categorical_column("cat1", tags=[Tags.CATEGORICAL], num_items=20)])
     with test_case.assertRaisesRegex(ValueError, "at least two features"):
-        ml.HashedCross(num_bins=10, schema=schema, output_mode="int")([tf.constant(1)])
+        mm.HashedCross(num_bins=10, schema=schema, output_mode="int")([tf.constant(1)])
 
 
 def test_hashedcross_from_config():
@@ -379,8 +379,8 @@ def test_hashedcross_from_config():
     inputs = {}
     inputs["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [101], [101], [102], [102]])
-    hashed_cross_op = ml.HashedCross(schema=schema, num_bins=5, output_mode="one_hot", sparse=False)
-    cloned_hashed_cross_op = ml.HashedCross.from_config(hashed_cross_op.get_config())
+    hashed_cross_op = mm.HashedCross(schema=schema, num_bins=5, output_mode="one_hot", sparse=False)
+    cloned_hashed_cross_op = mm.HashedCross.from_config(hashed_cross_op.get_config())
     original_outputs = hashed_cross_op(inputs)
     cloned_outputs = cloned_hashed_cross_op(inputs)
     _, original_output_value = original_outputs.popitem()
@@ -408,10 +408,10 @@ def test_hashedcrosses_in_parallelblock():
     inputs["cat1"] = tf.constant([["A"], ["B"], ["A"], ["B"], ["A"]])
     inputs["cat2"] = tf.constant([[101], [101], [101], [102], [102]])
     inputs["cat3"] = tf.constant([[1], [0], [1], [2], [2]])
-    hashed_cross_0 = ml.HashedCross(
+    hashed_cross_0 = mm.HashedCross(
         schema=schema_0, num_bins=5, output_mode="one_hot", sparse=True, output_name="cross_0"
     )
-    hashed_cross_1 = ml.HashedCross(
+    hashed_cross_1 = mm.HashedCross(
         schema=schema_1, num_bins=10, output_mode="one_hot", sparse=True, output_name="cross_1"
     )
     hashed_crosses = ParallelBlock([hashed_cross_0, hashed_cross_1])
@@ -451,11 +451,11 @@ def test_hashedcross_as_pre(ecommerce_data: Dataset, run_eagerly):
     cross_schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     body = ParallelBlock(
         TabularBlock.from_schema(
-            schema=cross_schema, pre=ml.HashedCross(cross_schema, num_bins=1000)
+            schema=cross_schema, pre=mm.HashedCross(cross_schema, num_bins=1000)
         ),
         is_input=True,
-    ).connect(ml.MLPBlock([64]))
-    model = ml.Model(body, ml.BinaryClassificationTask("click"))
+    ).connect(mm.MLPBlock([64]))
+    model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
@@ -464,11 +464,11 @@ def test_hashedcross_as_pre(ecommerce_data: Dataset, run_eagerly):
 def test_hashedcross_in_model(ecommerce_data: Dataset, run_eagerly):
     cross_schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     branches = {
-        "cross_product": ml.HashedCross(cross_schema, num_bins=1000, is_input=True),
-        "features": ml.InputBlock(ecommerce_data.schema),
+        "cross_product": mm.HashedCross(cross_schema, num_bins=1000, is_input=True),
+        "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(ml.MLPBlock([64]))
-    model = ml.Model(body, ml.BinaryClassificationTask("click"))
+    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
+    model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
     testing_utils.model_test(model, ecommerce_data)
@@ -489,7 +489,7 @@ def test_category_encoding_different_input_different_output():
     )
 
     # 1. Sparse output
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema,
         output_mode="count",
         sparse=True,
@@ -510,7 +510,7 @@ def test_category_encoding_different_input_different_output():
     test_case.assertAllEqual(expected_indices_2, outputs["sparse_feature"].indices)
 
     # 2. Dense output
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema,
         output_mode="count",
         sparse=False,
@@ -531,7 +531,7 @@ def test_category_encoding_invalid_input():
     )
     inputs = {}
     inputs["ragged_feature"] = tf.ragged.constant([[1, 2, 3], [3, 1], []])
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema,
         output_mode="count",
         sparse=False,
@@ -554,7 +554,7 @@ def test_category_encoding_weightd_count_dense(input, weight):
     # pyformat: enable
     expected_output_shape = [2, 6]
 
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema, output_mode="count", count_weights=weight
     )
 
@@ -581,7 +581,7 @@ def test_category_encoding_weightd_count_sparse(input, weight):
     # pyformat: enable
     expected_output_shape = [2, 6]
 
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema, output_mode="count", count_weights=weight
     )
 
@@ -601,7 +601,7 @@ def test_category_encoding_weightd_count_not_match(input, weight):
             create_categorical_column("feature", tags=[Tags.CATEGORICAL], num_items=5),
         ]
     )
-    category_encoding = ml.CategoryEncoding(
+    category_encoding = mm.CategoryEncoding(
         schema=schema, output_mode="count", count_weights=weight
     )
     inputs = {}
@@ -635,7 +635,7 @@ def test_category_encoding_multi_hot_2d_input(input):
     # pyformat: enable
     expected_output_shape = [2, 6]
 
-    category_encoding = ml.CategoryEncoding(schema=schema, output_mode="multi_hot")
+    category_encoding = mm.CategoryEncoding(schema=schema, output_mode="multi_hot")
 
     inputs = {}
     inputs["feature"] = input
@@ -669,7 +669,7 @@ def test_category_encoding_multi_hot_single_value(input):
     # pyformat: enable
     expected_output_shape = [3, 6]
 
-    category_encoding = ml.CategoryEncoding(schema=schema, output_mode="multi_hot")
+    category_encoding = mm.CategoryEncoding(schema=schema, output_mode="multi_hot")
 
     inputs = {}
     inputs["feature"] = input
@@ -713,7 +713,7 @@ def test_category_encoding_one_hot(input):
     # pyformat: enable
     expected_output_shape = [4, 6]
 
-    category_encoding = ml.CategoryEncoding(schema=schema, output_mode="one_hot")
+    category_encoding = mm.CategoryEncoding(schema=schema, output_mode="one_hot")
 
     inputs = {}
     inputs["feature"] = input
@@ -729,7 +729,7 @@ def test_category_encoding_one_hot(input):
 def test_category_encoding_one_hot_2D_input_should_raise(input):
     test_case = TestCase()
     schema = Schema([create_categorical_column("feature", tags=[Tags.CATEGORICAL], num_items=5)])
-    category_encoding = ml.CategoryEncoding(schema=schema, output_mode="one_hot")
+    category_encoding = mm.CategoryEncoding(schema=schema, output_mode="one_hot")
     inputs = {}
     inputs["feature"] = input
     with test_case.assertRaisesRegex(
@@ -752,7 +752,7 @@ def test_category_encoding_should_raise_if_input_3D(input):
             create_categorical_column("feature", tags=[Tags.CATEGORICAL], num_items=5),
         ]
     )
-    category_encoding = ml.CategoryEncoding(schema=schema, output_mode="multi_hot")
+    category_encoding = mm.CategoryEncoding(schema=schema, output_mode="multi_hot")
     inputs = {}
     inputs["feature"] = input
     with test_case.assertRaisesRegex(
@@ -781,7 +781,7 @@ def test_hashedcrossall():
     inputs["cat5"] = tf.constant([[1], [0], [1], [3], [2]])
     inputs["cat6"] = tf.constant([[1], [0], [1], [3], [2]])
 
-    hashed_cross_all = ml.HashedCrossAll(
+    hashed_cross_all = mm.HashedCrossAll(
         schema=schema,
         infer_num_bins=True,
         output_mode="one_hot",
@@ -807,11 +807,11 @@ def test_hashedcrossall_in_model(ecommerce_data: Dataset, run_eagerly):
         names=["user_categories", "item_category", "item_brand"]
     )
     branches = {
-        "cross_product": ml.HashedCrossAll(cross_schema, max_num_bins=1000, infer_num_bins=True),
-        "features": ml.InputBlock(ecommerce_data.schema),
+        "cross_product": mm.HashedCrossAll(cross_schema, max_num_bins=1000, infer_num_bins=True),
+        "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(ml.MLPBlock([64]))
-    model = ml.Model(body, ml.BinaryClassificationTask("click"))
+    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
+    model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
@@ -819,9 +819,24 @@ def test_hashedcrossall_in_model(ecommerce_data: Dataset, run_eagerly):
 def test_to_target_loader():
     schema = Schema(
         [
-            ColumnSchema("a", tags=[Tags.ITEM, Tags.CATEGORICAL]),
-            ColumnSchema("b", tags=[Tags.USER, Tags.CATEGORICAL]),
-            ColumnSchema("c", tags=[Tags.CATEGORICAL]),
+            ColumnSchema(
+                "a",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "b",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "c",
+                tags=[Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
         ]
     )
 
@@ -833,7 +848,7 @@ def test_to_target_loader():
     )
     input_df = input_df[sorted(input_df.columns)]
     dataset = Dataset(input_df, schema=schema)
-    loader = ml.Loader(dataset, batch_size=10, transforms=[ml.ToTarget(schema, "c")])
+    loader = mm.Loader(dataset, batch_size=10, transforms=[mm.ToTarget(schema, "c")])
     batch = next(iter(loader))
 
     assert sorted(batch.outputs.keys()) == ["a", "b"]
@@ -842,14 +857,70 @@ def test_to_target_loader():
     assert loader.output_schema.select_by_tag(Tags.TARGET).column_names == ["c"]
 
 
+def test_to_target_loader_one_hot_true():
+    schema = Schema(
+        [
+            ColumnSchema(
+                "a",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "b",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "c",
+                tags=[Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+        ]
+    )
+
+    input_df = pd.DataFrame(
+        [
+            {"a": 1, "b": 2, "c": 3},
+            {"a": 4, "b": 5, "c": 6},
+        ]
+    )
+    input_df = input_df[sorted(input_df.columns)]
+    dataset = Dataset(input_df, schema=schema)
+    loader = mm.Loader(dataset, batch_size=10, transforms=[mm.ToTarget(schema, "c", one_hot=True)])
+    batch = next(iter(loader))
+
+    assert sorted(batch.outputs.keys()) == ["a", "b"]
+    assert sorted(batch.targets.keys()) == ["c"]
+    assert batch.targets["c"].numpy().shape == (2, 11)
+    assert loader.output_schema.select_by_tag(Tags.TARGET).column_names == ["c"]
+
+
 def test_to_target_compute_output_schema():
     schema = Schema(
         [
-            ColumnSchema("a", tags=[Tags.ITEM, Tags.CATEGORICAL]),
-            ColumnSchema("b", tags=[Tags.USER, Tags.CATEGORICAL]),
-            ColumnSchema("label", tags=[Tags.CATEGORICAL]),
+            ColumnSchema(
+                "a",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "b",
+                tags=[Tags.ITEM, Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
+            ColumnSchema(
+                "label",
+                tags=[Tags.CATEGORICAL],
+                dtype=np.int32,
+                properties={"domain": {"min": 0, "max": 10}},
+            ),
         ]
     )
-    to_target = ml.ToTarget(schema, "label")
+    to_target = mm.ToTarget(schema, "label")
     output_schema = to_target.compute_output_schema(schema)
     assert "label" in output_schema.select_by_tag(Tags.TARGET).column_names

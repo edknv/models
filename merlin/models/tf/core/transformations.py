@@ -1134,10 +1134,13 @@ class ToTarget(Block):
         super().__init__(**kwargs)
         self.schema = schema
         self.target = target
-        self.one_hot = one_hot
+        self._target_column_schemas = self._get_target_column_schemas()
+        self._category_encoder = (
+            CategoryEncoding(schema=Schema(self._target_column_schemas)) if one_hot else None
+        )
 
-    def _target_column_schemas(self):
-        target_columns = {}
+    def _get_target_column_schemas(self) -> Dict[str, ColumnSchema]:
+        target_columns: Dict[str, ColumnSchema] = {}
         for t in self.target:
             if isinstance(t, str):
                 target_columns[t] = self.schema.select_by_name(t).first
@@ -1149,6 +1152,7 @@ class ToTarget(Block):
                     target_columns[col_name] = col_schema
             else:
                 raise ValueError(f"Unsupported target type {type(t)}")
+
         return target_columns
 
     def call(self, inputs: TabularData, targets=None, testing=False, **kwargs) -> Prediction:
@@ -1158,16 +1162,17 @@ class ToTarget(Block):
         if not targets:
             targets = {}
 
-        target_columns = self._target_column_schemas()
-
         outputs = {}
         for name, val in inputs.items():
-            if name not in target_columns:
+            if name not in self._target_column_schemas:
                 outputs[name] = inputs[name]
                 continue
             if name in targets:
                 continue
             targets[name] = inputs[name]
+
+        if self._category_encoder is not None:
+            targets.update(self._category_encoder(targets))
 
         return Prediction(outputs=outputs, targets=targets)
 
@@ -1175,10 +1180,9 @@ class ToTarget(Block):
         return input_shape
 
     def compute_output_schema(self, input_schema: Schema) -> Schema:
-        target_columns = self._target_column_schemas()
         output_column_schemas = {}
         for col_name, col_schema in input_schema.column_schemas.items():
-            if col_name in target_columns:
+            if col_name in self._target_column_schemas:
                 output_column_schemas[col_name] = col_schema.with_tags(Tags.TARGET)
             else:
                 output_column_schemas[col_name] = col_schema
