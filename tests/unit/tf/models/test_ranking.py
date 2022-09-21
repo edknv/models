@@ -85,7 +85,7 @@ def test_dlrm_model_with_sample_weights_and_weighted_metrics(music_streaming_dat
         sample_weight = tf.cast(features.pop(sample_weight_col_name), tf.float32)
         return features, labels, sample_weight
 
-    batched_ds = mm.Loader(music_streaming_data, batch_size=10, transforms=[add_sample_weight])
+    batched_ds = mm.Loader(music_streaming_data, batch_size=10, transform=add_sample_weight)
     batch = next(iter(batched_ds))
 
     model = mm.DLRMModel(
@@ -292,13 +292,13 @@ def test_wide_deep_model_wide_onehot_multihot_feature_interaction(ecommerce_data
         # Multi-hot features
         mm.SequentialBlock(
             mm.Filter(cat_schema_multihot),
-            mm.AsDenseFeatures(max_seq_length=6),
+            mm.ListToDense(max_seq_length=6),
             mm.CategoryEncoding(cat_schema_multihot, sparse=True, output_mode="multi_hot"),
         ),
         # 2nd level feature interactions of one-hot features
         mm.SequentialBlock(
             mm.Filter(cat_schema),
-            mm.AsDenseFeatures(max_seq_length=6),
+            mm.ListToDense(max_seq_length=6),
             mm.HashedCrossAll(
                 cat_schema,
                 num_bins=100,
@@ -407,69 +407,11 @@ def test_wide_deep_model_wide_feature_interaction_multi_optimizer(ecommerce_data
         deep_block=mm.MLPBlock([31, 16]),
         prediction_tasks=mm.BinaryClassificationTask("click"),
     )
-    # print(model.summary(expand_nested=True, show_trainable=True, line_length=80))
-    """
-     Layer (type)                       Output Shape                    Param #     Trainable
-    ===========================================================================================
-    parallel_block_2 (ParallelBlock)   multiple                        9186        Y
-    |¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|
-    | sequential_block_6 (SequentialBloc  multiple                     2           Y          |
-    | k)                                                                                      |
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    || parallel_block_1 (ParallelBlock)  multiple                     0           Y          ||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||| tabular_block_1 (TabularBlock)  multiple                     0           Y          |||
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    || sequential_block_5 (SequentialBloc  multiple                   2           Y          ||
-    || k)                                                                                    ||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||| private__dense_3 (_Dense)    multiple                        2           Y          |||
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    |¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|
-    | sequential_block_3 (SequentialBloc  multiple                     9184        Y          |
-    | k)                                                                                      |
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    || sequential_block_1 (SequentialBloc  multiple                   9167        Y          ||
-    || k)                                                                                    ||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||| parallel_block (ParallelBlock)  multiple                     7632        Y          |||
-    ||||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||||
-    |||| embeddings (ParallelBlock)  multiple                       7632        Y          ||||
-    |||||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||||
-    ||||| user_categories (EmbeddingTable)  multiple               4816        Y          |||||
-    |||||                                                                                 |||||
-    ||||| item_category (EmbeddingTable)  multiple                 808         Y          |||||
-    |||||                                                                                 |||||
-    ||||| item_brand (EmbeddingTable)  multiple                    2008        Y          |||||
-    ||||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||| sequential_block (SequentialBlock)  multiple                 1535        Y          |||
-    ||||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||||
-    |||| private__dense (_Dense)    multiple                        1023        Y          ||||
-    ||||                                                                                   ||||
-    |||| private__dense_1 (_Dense)  multiple                        512         Y          ||||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    || sequential_block_2 (SequentialBloc  multiple                   17          Y          ||
-    || k)                                                                                    ||
-    |||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|||
-    ||| private__dense_2 (_Dense)    multiple                        17          Y          |||
-    ||¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯||
-    |¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|
-    ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-    click/binary_classification_task (  multiple                       2           Y
-    BinaryClassificationTask)
-
-    model_context (ModelContext)       multiple                        0           Y
-
-    ===========================================================================================
-    """
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=True)
 
-    # Get the names of wide model and deep model from model.summary()
-    wide_model = model.get_blocks_by_name("sequential_block_6")
-    deep_model = model.get_blocks_by_name("sequential_block_3")
+    wide_model = model.blocks[0].parallel_layers["wide"]
+    deep_model = model.blocks[0].parallel_layers["deep"]
 
     multi_optimizer = mm.MultiOptimizer(
         default_optimizer="adagrad",

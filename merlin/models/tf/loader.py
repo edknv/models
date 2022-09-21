@@ -208,8 +208,8 @@ class Loader(tf.keras.utils.Sequence, DataLoader):
         `reader_kwargs` will be ignored
     batch_size: int
         Number of samples to yield at each iteration
-    transforms: List[Union[Callable, SchemaAwareTransform], optional
-        One or multiple transforms to apply to each batch of data.
+    transform: Union[Callable, SchemaAwareTransform], optional
+        Transforms to apply to each batch of data.
     label_names: list(str)
         Column name of the target variable in the dataframe specified by
         `paths_or_dataset`
@@ -262,7 +262,7 @@ class Loader(tf.keras.utils.Sequence, DataLoader):
         self,
         paths_or_dataset,
         batch_size,
-        transforms=None,
+        transform=None,
         label_names=None,
         feature_columns=None,
         cat_names=None,
@@ -312,11 +312,7 @@ class Loader(tf.keras.utils.Sequence, DataLoader):
             sparse_max=sparse_max,
             sparse_as_dense=sparse_as_dense,
         )
-        if not transforms:
-            transforms = []
-        if not isinstance(transforms, (list, tuple)):
-            transforms = [transforms]
-        self._transforms = [("all", t) for t in transforms]
+        self._transforms = [("all", transform)] if transform else []
         self.multi_label_as_dict = multi_label_as_dict
 
     def __len__(self):
@@ -327,6 +323,10 @@ class Loader(tf.keras.utils.Sequence, DataLoader):
         # of the appropriate methods? A Metaclass?
         DataLoader.stop(self)
         return DataLoader.__len__(self)
+
+    def on_epoch_end(self):
+        """Method to call at the end of every epoch."""
+        DataLoader.stop(self)
 
     def __getitem__(self, idx):
         """
@@ -602,7 +602,7 @@ def sample_batch(
             "Sparse values cannot be converted to both ragged tensors and dense tensors"
         )
 
-    from merlin.models.tf.core.transformations import AsDenseFeatures, AsRaggedFeatures
+    from merlin.models.tf.transforms.tensor import ListToDense, ListToRagged
 
     if not isinstance(data, Loader):
         data = Loader(data, batch_size=batch_size, shuffle=shuffle)
@@ -612,9 +612,9 @@ def sample_batch(
     inputs, targets = batch[0], batch[1]
 
     if to_ragged:
-        inputs = AsRaggedFeatures()(inputs)
+        inputs = ListToRagged()(inputs)
     elif to_dense:
-        inputs = AsDenseFeatures()(inputs)
+        inputs = ListToDense()(inputs)
     if not include_targets:
         return inputs
     return inputs, targets

@@ -20,17 +20,6 @@
 from merlin.models.loader.tf_utils import configure_tensorflow
 from merlin.models.tf.core.index import IndexBlock, TopKIndexBlock
 from merlin.models.tf.core.tabular import AsTabular, Filter, TabularBlock
-from merlin.models.tf.core.transformations import (
-    AsDenseFeatures,
-    AsRaggedFeatures,
-    AsSparseFeatures,
-    CategoryEncoding,
-    ExpandDims,
-    HashedCross,
-    HashedCrossAll,
-    LabelToOneHot,
-    ToTarget,
-)
 
 configure_tensorflow()
 
@@ -83,9 +72,8 @@ from merlin.models.tf.core.combinators import (
     SequentialBlock,
 )
 from merlin.models.tf.core.encoder import EncoderBlock
-from merlin.models.tf.data_augmentation.noise import StochasticSwapNoise
 from merlin.models.tf.inputs.base import InputBlock, InputBlockV2
-from merlin.models.tf.inputs.continuous import ContinuousFeatures
+from merlin.models.tf.inputs.continuous import Continuous, ContinuousFeatures, ContinuousProjection
 from merlin.models.tf.inputs.embedding import (
     AverageEmbeddingsByWeightFeature,
     ContinuousEmbedding,
@@ -115,22 +103,31 @@ from merlin.models.tf.models.retrieval import (
     TwoTowerModel,
     YoutubeDNNRetrievalModel,
 )
+from merlin.models.tf.outputs.base import ModelOutput
+from merlin.models.tf.outputs.classification import BinaryOutput, CategoricalOutput
+from merlin.models.tf.outputs.contrastive import ContrastiveOutput
+from merlin.models.tf.outputs.regression import RegressionOutput
+from merlin.models.tf.outputs.sampling.base import Candidate, CandidateSampler
+from merlin.models.tf.outputs.sampling.in_batch import InBatchSamplerV2
+from merlin.models.tf.outputs.sampling.popularity import PopularityBasedSamplerV2
 from merlin.models.tf.prediction_tasks.base import ParallelPredictionBlock, PredictionTask
 from merlin.models.tf.prediction_tasks.classification import (
     BinaryClassificationTask,
     MultiClassClassificationTask,
 )
 from merlin.models.tf.prediction_tasks.multi import PredictionTasks
-from merlin.models.tf.prediction_tasks.next_item import NextItemPredictionTask
 from merlin.models.tf.prediction_tasks.regression import RegressionTask
 from merlin.models.tf.prediction_tasks.retrieval import ItemRetrievalTask
-from merlin.models.tf.predictions.base import PredictionBlock
-from merlin.models.tf.predictions.classification import BinaryPrediction, CategoricalPrediction
-from merlin.models.tf.predictions.dot_product import DotProductCategoricalPrediction
-from merlin.models.tf.predictions.regression import RegressionPrediction
-from merlin.models.tf.predictions.sampling.base import Items, ItemSamplerV2
-from merlin.models.tf.predictions.sampling.in_batch import InBatchSamplerV2
-from merlin.models.tf.predictions.sampling.popularity import PopularityBasedSamplerV2
+from merlin.models.tf.transforms.features import (
+    CategoryEncoding,
+    HashedCross,
+    HashedCrossAll,
+    ToOneHot,
+    ToTarget,
+)
+from merlin.models.tf.transforms.noise import StochasticSwapNoise
+from merlin.models.tf.transforms.regularization import L2Norm
+from merlin.models.tf.transforms.tensor import ExpandDims, ListToDense, ListToRagged, ListToSparse
 from merlin.models.tf.utils import repr_utils
 from merlin.models.tf.utils.tf_utils import TensorInitializer
 
@@ -165,6 +162,8 @@ __all__ = [
     "DenseResidualBlock",
     "TabularBlock",
     "ContinuousFeatures",
+    "Continuous",
+    "ContinuousProjection",
     "EmbeddingFeatures",
     "SequenceEmbeddingFeatures",
     "EmbeddingOptions",
@@ -177,9 +176,9 @@ __all__ = [
     "TwoTowerBlock",
     "MatrixFactorizationBlock",
     "QueryItemIdsEmbeddingsBlock",
-    "AsDenseFeatures",
-    "AsRaggedFeatures",
-    "AsSparseFeatures",
+    "ListToDense",
+    "ListToRagged",
+    "ListToSparse",
     "CategoryEncoding",
     "HashedCross",
     "HashedCrossAll",
@@ -192,12 +191,13 @@ __all__ = [
     "StackFeatures",
     "DotProductInteraction",
     "FMPairwiseInteraction",
-    "LabelToOneHot",
-    "PredictionBlock",
-    "BinaryPrediction",
-    "RegressionPrediction",
-    "CategoricalPrediction",
-    "DotProductCategoricalPrediction",
+    "ToOneHot",
+    "ToTarget",
+    "ModelOutput",
+    "BinaryOutput",
+    "RegressionOutput",
+    "CategoricalOutput",
+    "ContrastiveOutput",
     "PredictionTask",
     "BinaryClassificationTask",
     "MultiClassClassificationTask",
@@ -209,7 +209,6 @@ __all__ = [
     "OptimizerBlocks",
     "ItemRetrievalTask",
     "ItemRetrievalScorer",
-    "NextItemPredictionTask",
     "NDCGAt",
     "PrecisionAt",
     "MRRAt",
@@ -224,6 +223,7 @@ __all__ = [
     "PredictionTasks",
     "StochasticSwapNoise",
     "ExpandDims",
+    "L2Norm",
     "NoOp",
     "ItemSampler",
     "EmbeddingWithMetadata",

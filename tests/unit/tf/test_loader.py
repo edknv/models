@@ -42,7 +42,7 @@ def test_lazy_dataset_map():
         time.sleep(sleep_time_seconds)
         return (x, y)
 
-    loader = mm.Loader(dataset, batch_size=10, transforms=[identity])
+    loader = mm.Loader(dataset, batch_size=10, transform=identity)
 
     elapsed_time_seconds = timeit.timeit(lambda: next(loader), number=1)
 
@@ -226,7 +226,7 @@ def test_tf_map(tmpdir):
         batch_size=10,
         label_names=label_name,
         shuffle=False,
-        transforms=[add_sample_weight],
+        transform=add_sample_weight,
     )
 
     for X, y, sample_weight in data_itr:
