@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import tempfile
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -24,60 +21,17 @@ from tensorflow.test import TestCase
 
 import merlin.models.tf as mm
 from merlin.io import Dataset
-from merlin.models.tf.core.combinators import ParallelBlock, TabularBlock
+from merlin.models.tf.transforms.features import ContinuousPowers
 from merlin.models.tf.utils import testing_utils
 from merlin.models.utils.schema_utils import create_categorical_column
 from merlin.schema import ColumnSchema, Schema, Tags
 
 
-def test_expand_dims_same_axis():
-    NUM_ROWS = 100
-
-    # Creating some input sequences with padding in the end
-    # (to emulate sessions with different lengths)
-    inputs = {
-        "cont_feat": tf.random.uniform((NUM_ROWS,)),
-        "multi_hot_categ_feat": tf.random.uniform(
-            (NUM_ROWS, 4), minval=1, maxval=100, dtype=np.int32
-        ),
-    }
-
-    expand_dims_op = mm.ExpandDims(expand_dims=-1)
-    expanded_inputs = expand_dims_op(inputs)
-
-    assert inputs.keys() == expanded_inputs.keys()
-    assert list(expanded_inputs["cont_feat"].shape) == [NUM_ROWS, 1]
-    assert list(expanded_inputs["multi_hot_categ_feat"].shape) == [NUM_ROWS, 4, 1]
-
-
-def test_expand_dims_axis_as_dict():
-    NUM_ROWS = 100
-
-    # Creating some input sequences with padding in the end
-    # (to emulate sessions with different lengths)
-    inputs = {
-        "cont_feat1": tf.random.uniform((NUM_ROWS,)),
-        "cont_feat2": tf.random.uniform((NUM_ROWS,)),
-        "multi_hot_categ_feat": tf.random.uniform(
-            (NUM_ROWS, 4), minval=1, maxval=100, dtype=np.int32
-        ),
-    }
-
-    expand_dims_op = mm.ExpandDims(expand_dims={"cont_feat2": 0, "multi_hot_categ_feat": 1})
-    expanded_inputs = expand_dims_op(inputs)
-
-    assert inputs.keys() == expanded_inputs.keys()
-
-    assert list(expanded_inputs["cont_feat1"].shape) == [NUM_ROWS]
-    assert list(expanded_inputs["cont_feat2"].shape) == [1, NUM_ROWS]
-    assert list(expanded_inputs["multi_hot_categ_feat"].shape) == [NUM_ROWS, 1, 4]
-
-
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_categorical_encoding_as_pre(ecommerce_data: Dataset, run_eagerly):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    body = ParallelBlock(
-        TabularBlock.from_schema(schema=schema, pre=mm.CategoryEncoding(schema)),
+    body = mm.ParallelBlock(
+        mm.TabularBlock.from_schema(schema=schema, pre=mm.CategoryEncoding(schema)),
         is_input=True,
     ).connect(mm.MLPBlock([32]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
@@ -92,105 +46,32 @@ def test_categorical_encoding_in_model(ecommerce_data: Dataset, run_eagerly):
         "one_hot": mm.CategoryEncoding(schema, is_input=True),
         "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([32]))
+    body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([32]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
 
-def test_popularity_logits_correct():
-    from merlin.models.tf.core.base import PredictionOutput
-    from merlin.models.tf.core.transformations import PopularityLogitsCorrection
+def test_continuous_powers():
+    NUM_ROWS = 100
 
-    schema = Schema(
-        [
-            create_categorical_column(
-                "item_feature", num_items=100, tags=[Tags.CATEGORICAL, Tags.ITEM_ID]
-            ),
-        ]
-    )
-
-    NUM_ITEMS = 101
-    NUM_ROWS = 16
-    NUM_SAMPLE = 20
-
-    logits = tf.random.uniform((NUM_ROWS, NUM_SAMPLE))
-    negative_item_ids = tf.random.uniform(
-        (NUM_SAMPLE - 1,), minval=1, maxval=NUM_ITEMS, dtype=np.int32
-    )
-    positive_item_ids = tf.random.uniform((NUM_ROWS,), minval=1, maxval=NUM_ITEMS, dtype=np.int32)
-    item_frequency = tf.sort(tf.random.uniform((NUM_ITEMS,), minval=0, maxval=1000, dtype=np.int32))
-
-    inputs = PredictionOutput(
-        predictions=logits,
-        targets=[],
-        positive_item_ids=positive_item_ids,
-        negative_item_ids=negative_item_ids,
-    )
-
-    corrected_logits = PopularityLogitsCorrection(
-        item_frequency, reg_factor=0.5, schema=schema
-    ).call_outputs(outputs=inputs)
-
-    tf.debugging.assert_less_equal(logits, corrected_logits.predictions)
-
-
-def test_popularity_logits_correct_from_parquet():
-    import numpy as np
-    import pandas as pd
-
-    from merlin.models.tf.core.transformations import PopularityLogitsCorrection
-
-    schema = Schema(
-        [
-            create_categorical_column(
-                "item_feature", num_items=100, tags=[Tags.CATEGORICAL, Tags.ITEM_ID]
-            ),
-        ]
-    )
-    NUM_ITEMS = 101
-
-    frequency_table = pd.DataFrame(
-        {"frequency": list(np.sort(np.random.randint(0, 1000, size=(NUM_ITEMS,))))}
-    )
-    with tempfile.TemporaryDirectory() as tmpdir:
-        frequency_table.to_parquet(tmpdir + "/frequency_table.parquet")
-        corrected_logits = PopularityLogitsCorrection.from_parquet(
-            tmpdir + "/frequency_table.parquet",
-            frequencies_probs_col="frequency",
-            gpu=False,
-            schema=schema,
-        )
-    assert corrected_logits.get_candidate_probs().shape == (NUM_ITEMS,)
-
-
-def test_items_weight_tying_with_different_domain_name():
-    from merlin.models.tf.core.transformations import ItemsPredictionWeightTying
-
-    NUM_ROWS = 16
-    schema = Schema(
-        [
-            create_categorical_column(
-                "item_id",
-                domain_name="joint_item_id",
-                num_items=100,
-                tags=[Tags.CATEGORICAL, Tags.ITEM_ID],
-            ),
-        ]
-    )
     inputs = {
-        "item_id": tf.random.uniform((NUM_ROWS, 1), minval=1, maxval=101, dtype=np.int32),
-        "target": tf.random.uniform((NUM_ROWS, 1), minval=0, maxval=10, dtype=np.int32),
+        "cont_feat_1": tf.random.uniform((NUM_ROWS,)),
+        "cont_feat_2": tf.random.uniform((NUM_ROWS,)),
     }
 
-    weight_tying_block = ItemsPredictionWeightTying(schema=schema)
-    input_block = mm.InputBlock(schema)
-    task = mm.MultiClassClassificationTask("target")
-    model = mm.Model(input_block, mm.MLPBlock([64]), weight_tying_block, task)
+    powers = ContinuousPowers()
 
-    _ = model(inputs)
-    weight_tying_embeddings = model.blocks[2].context.get_embedding("joint_item_id")
-    assert weight_tying_embeddings.shape == (101, 64)
+    outputs = powers(inputs)
+
+    assert len(outputs) == len(inputs) * 3
+    for key in inputs:
+        assert key in outputs
+        assert key + "_sqrt" in outputs
+        assert key + "_pow" in outputs
+
+        tf.assert_equal(tf.sqrt(inputs[key]), outputs[key + "_sqrt"])
+        tf.assert_equal(tf.pow(inputs[key], 2), outputs[key + "_pow"])
 
 
 def test_hashedcross_int():
@@ -414,7 +295,7 @@ def test_hashedcrosses_in_parallelblock():
     hashed_cross_1 = mm.HashedCross(
         schema=schema_1, num_bins=10, output_mode="one_hot", sparse=True, output_name="cross_1"
     )
-    hashed_crosses = ParallelBlock([hashed_cross_0, hashed_cross_1])
+    hashed_crosses = mm.ParallelBlock([hashed_cross_0, hashed_cross_1])
     outputs = hashed_crosses(inputs)
     output_value_0 = outputs["cross_0"]
     output_value_0 = tf.sparse.to_dense(output_value_0)
@@ -449,8 +330,8 @@ def test_hashedcrosses_in_parallelblock():
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_hashedcross_as_pre(ecommerce_data: Dataset, run_eagerly):
     cross_schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    body = ParallelBlock(
-        TabularBlock.from_schema(
+    body = mm.ParallelBlock(
+        mm.TabularBlock.from_schema(
             schema=cross_schema, pre=mm.HashedCross(cross_schema, num_bins=1000)
         ),
         is_input=True,
@@ -467,7 +348,7 @@ def test_hashedcross_in_model(ecommerce_data: Dataset, run_eagerly):
         "cross_product": mm.HashedCross(cross_schema, num_bins=1000, is_input=True),
         "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
+    body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
@@ -810,7 +691,7 @@ def test_hashedcrossall_in_model(ecommerce_data: Dataset, run_eagerly):
         "cross_product": mm.HashedCrossAll(cross_schema, max_num_bins=1000, infer_num_bins=True),
         "features": mm.InputBlock(ecommerce_data.schema),
     }
-    body = ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
+    body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
@@ -924,3 +805,93 @@ def test_to_target_compute_output_schema():
     to_target = mm.ToTarget(schema, "label")
     output_schema = to_target.compute_output_schema(schema)
     assert "label" in output_schema.select_by_tag(Tags.TARGET).column_names
+
+
+@pytest.mark.parametrize(
+    "only_selected_in_schema",
+    [False, True],
+)
+def test_to_dense(only_selected_in_schema):
+    test_case = TestCase()
+
+    if only_selected_in_schema:
+        schema = Schema(
+            [
+                create_categorical_column("feature1", tags=[Tags.CATEGORICAL], num_items=5),
+                create_categorical_column("feature2", tags=[Tags.CATEGORICAL], num_items=5),
+            ]
+        )
+        to_dense = mm.ToDense(schema.select_by_name("feature1"))
+    else:
+        # Converts all features to dense
+        to_dense = mm.ToDense()
+
+    feature1_dense = np.array([[1, 2, 3, 0], [0, 3, 1, 0]])
+    feature2_dense = np.array([[2, 3, 4, 0], [2, 0, 1, 0]])
+
+    data = {
+        "feature1": tf.sparse.from_dense(feature1_dense),
+        "feature2": tf.sparse.from_dense(feature2_dense),
+    }
+
+    output = to_dense(data)
+
+    assert output["feature1"].shape == data["feature1"].shape
+    assert output["feature2"].shape == data["feature2"].shape
+
+    assert isinstance(output["feature1"], tf.Tensor)
+    if only_selected_in_schema:
+        assert isinstance(output["feature2"], tf.SparseTensor)
+    else:
+        assert isinstance(output["feature2"], tf.Tensor)
+
+    # tf.convert_to_tensor(
+    test_case.assertAllClose(output["feature1"], feature1_dense)
+    if only_selected_in_schema:
+        test_case.assertAllClose(tf.sparse.to_dense(output["feature2"]), feature2_dense)
+    else:
+        test_case.assertAllClose(output["feature2"], feature2_dense)
+
+
+@pytest.mark.parametrize(
+    "only_selected_in_schema",
+    [False, True],
+)
+def test_to_sparse(only_selected_in_schema):
+    if only_selected_in_schema:
+        schema = Schema(
+            [
+                create_categorical_column("feature1", tags=[Tags.CATEGORICAL], num_items=5),
+                create_categorical_column("feature2", tags=[Tags.CATEGORICAL], num_items=5),
+            ]
+        )
+        to_sparse = mm.ToSparse(schema.select_by_name("feature1"))
+    else:
+        # Converts all features to dense
+        to_sparse = mm.ToSparse()
+
+    feature1_dense = np.array([[1, 2, 3, 0], [0, 3, 1, 0]])
+    feature2_dense = np.array([[2, 3, 4, 0], [2, 0, 1, 0]])
+
+    data = {
+        "feature1": feature1_dense,
+        "feature2": feature2_dense,
+    }
+
+    output = to_sparse(data)
+
+    assert output["feature1"].shape == data["feature1"].shape
+    assert output["feature2"].shape == data["feature2"].shape
+
+    assert isinstance(output["feature1"], tf.SparseTensor)
+    if only_selected_in_schema:
+        assert isinstance(output["feature2"], tf.Tensor)
+    else:
+        assert isinstance(output["feature2"], tf.SparseTensor)
+
+    # tf.convert_to_tensor(
+    tf.debugging.assert_equal(tf.sparse.to_dense(output["feature1"]), feature1_dense)
+    if only_selected_in_schema:
+        tf.debugging.assert_equal(output["feature2"], feature2_dense)
+    else:
+        tf.debugging.assert_equal(tf.sparse.to_dense(output["feature2"]), feature2_dense)

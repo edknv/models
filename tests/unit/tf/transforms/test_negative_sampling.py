@@ -21,7 +21,7 @@ import tensorflow as tf
 import merlin.models.tf as mm
 from merlin.io import Dataset
 from merlin.models.tf.core.prediction import Prediction
-from merlin.models.tf.data_augmentation.negative_sampling import UniformNegativeSampling
+from merlin.models.tf.transforms.negative_sampling import InBatchNegatives
 from merlin.models.tf.utils import testing_utils
 from merlin.schema import ColumnSchema, Schema, Tags
 
@@ -57,7 +57,7 @@ class TestAddRandomNegativesToBatch:
             ]
         )
         n_per_positive = 5
-        sampler = UniformNegativeSampling(schema, n_per_positive)
+        sampler = InBatchNegatives(schema, n_per_positive)
 
         input_df = pd.DataFrame(
             [
@@ -111,7 +111,7 @@ class TestAddRandomNegativesToBatch:
             music_streaming_data, batch_size=batch_size, include_targets=False, to_dense=to_dense
         )
 
-        sampler = UniformNegativeSampling(schema, n_per_positive, seed=tf_random_seed)
+        sampler = InBatchNegatives(schema, n_per_positive, seed=tf_random_seed)
 
         with_negatives = sampler(features)
         outputs = with_negatives.outputs
@@ -129,7 +129,7 @@ class TestAddRandomNegativesToBatch:
             music_streaming_data, batch_size=batch_size, include_targets=True, to_dense=to_dense
         )
 
-        sampler = UniformNegativeSampling(schema, 5, seed=tf_random_seed)
+        sampler = InBatchNegatives(schema, 5, seed=tf_random_seed)
 
         with_negatives = sampler(inputs, targets=targets)
         outputs = with_negatives.outputs
@@ -156,7 +156,7 @@ class TestAddRandomNegativesToBatch:
             music_streaming_data, batch_size=batch_size, include_targets=True, to_dense=to_dense
         )
 
-        sampler = UniformNegativeSampling(
+        sampler = InBatchNegatives(
             schema, n_per_positive, seed=tf_random_seed, run_when_testing=False
         )
 
@@ -180,7 +180,7 @@ class TestAddRandomNegativesToBatch:
 
         sampling = mm.Cond(
             ExampleIsTraining(),
-            UniformNegativeSampling(schema, 5, seed=tf_random_seed),
+            InBatchNegatives(schema, 5, seed=tf_random_seed),
             ExamplePredictionIdentity(),
         )
         model = mm.Model(
@@ -204,7 +204,7 @@ class TestAddRandomNegativesToBatch:
         testing_utils.model_test(model, dataset, run_eagerly=run_eagerly)
 
     def test_model_with_dataloader(self, music_streaming_data: Dataset, tf_random_seed: int):
-        add_negatives = UniformNegativeSampling(
+        add_negatives = InBatchNegatives(
             music_streaming_data.schema, 5, seed=tf_random_seed, return_tuple=True
         )
 
