@@ -15,7 +15,22 @@
 #
 
 import os
-import warnings
+
+try:
+    import horovod.tensorflow as hvd
+except ImportError:
+    hvd = None
+
+
+# Pin GPU to be used to process local rank (one GPU per process)
+# TODO: Setting the environment variable CUDA_VISIBLE_DEVICES is a last resort
+# because tensorflow's functions for setting devices such as
+# `tf.config.set_visible_devices` does not seem to work as expected.
+# It should be replaced with a better method when we find one.
+# This must be executed before importing tensorflow.
+if hvd:
+    hvd.init()
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(hvd.local_rank())
 
 import tensorflow as tf
 from packaging import version
@@ -36,31 +51,14 @@ def configure_tensorflow(memory_allocation=None, device=None):
     memory_allocation = int(memory_allocation)
     assert memory_allocation < total_gpu_mem_mb
 
-    # TODO: what will this look like in any sort
-    # of distributed set up?
     if device is None:
         device = int(os.environ.get("TF_VISIBLE_DEVICE", 0))
     tf_devices = tf.config.list_physical_devices("GPU")
     if HAS_GPU and len(tf_devices) == 0:
         raise ImportError("TensorFlow is not configured for GPU")
     if HAS_GPU:
-        try:
-            tf.config.set_logical_device_configuration(
-                tf_devices[device],
-                [tf.config.LogicalDeviceConfiguration(memory_limit=memory_allocation)],
-            )
-        except RuntimeError:
-            warnings.warn(
-                "TensorFlow runtime already initialized, may not be enough memory for cudf"
-            )
-        try:
-            tf.config.experimental.set_virtual_device_configuration(
-                tf_devices[device],
-                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=memory_allocation)],
-            )
-        except RuntimeError as e:
-            # Virtual devices must be set before GPUs have been initialized
-            warnings.warn(e)
+        for gpu in tf_devices:
+            tf.config.experimental.set_memory_growth(gpu, True)
 
     # versions using TF earlier than 2.3.0 need to use extension
     # library for dlpack support to avoid memory leak issue
