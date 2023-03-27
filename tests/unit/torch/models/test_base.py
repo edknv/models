@@ -1,4 +1,7 @@
+import os
+
 import pytorch_lightning as pl
+from lightning.fabric import Fabric
 
 from merlin.dataloader.torch import Loader
 from merlin.models.torch.blocks.mlp import MLPBlock
@@ -14,6 +17,7 @@ def test_simple_regression_mlp(music_streaming_data):
         ["user_genres", "click", "like", "item_genres"]
     )
     music_streaming_data.schema = schema
+    music_streaming_data = music_streaming_data.repartition(2)
 
     model = Model(
         TabularInputBlock(schema),
@@ -21,8 +25,18 @@ def test_simple_regression_mlp(music_streaming_data):
         RegressionOutput(),
     )
 
-    trainer = pl.Trainer(max_epochs=1, devices=[0])
-    loader = Loader(music_streaming_data, batch_size=2, shuffle=False)
+    # trainer = pl.Trainer(max_epochs=1, devices=[0])
+    fabric = Fabric(devices=2)
+    fabric.launch()
+    trainer = pl.Trainer(max_epochs=2, strategy="ddp", devices=2)
+    loader = Loader(
+        music_streaming_data,
+        batch_size=2,
+        shuffle=False,
+        global_rank=int(os.environ["LOCAL_RANK"]),
+        global_size=2,
+        device=int(os.environ["LOCAL_RANK"]),
+    )
 
     # Initialize the model parameters
     model.initialize(loader)
