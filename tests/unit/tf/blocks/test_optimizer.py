@@ -141,8 +141,8 @@ def test_optimizers(optimizers):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_model_with_multi_optimizers(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
     two_tower = ml.ParallelBlock({"user": user_tower, "item": item_tower}, aggregation="concat")
     model = ml.Model(two_tower, ml.BinaryClassificationTask("click"))
     multi_optimizers = ml.MultiOptimizer(
@@ -160,9 +160,9 @@ def test_model_with_multi_optimizers(ecommerce_data, run_eagerly):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_multi_optimizer_list_input(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
-    third_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    third_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
     two_tower = ml.ParallelBlock(
         {"user": user_tower, "item": item_tower, "third": third_tower}, aggregation="concat"
     )
@@ -181,9 +181,9 @@ def test_multi_optimizer_list_input(ecommerce_data, run_eagerly):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_multi_optimizer_add(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
-    third_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    third_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
     two_tower = ml.ParallelBlock(
         {"user": user_tower, "item": item_tower, "third": third_tower}, aggregation="concat"
     )
@@ -214,8 +214,8 @@ def test_multi_optimizer_add(ecommerce_data, run_eagerly):
 def test_multi_optimizers_from_config(ecommerce_data, optimizers):
     test_case = TestCase()
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
     multi_optimizers = ml.MultiOptimizer(
         default_optimizer="adam",
         optimizers_and_blocks=[
@@ -244,9 +244,9 @@ def test_multi_optimizers_from_config(ecommerce_data, optimizers):
 def test_multi_optimizers_from_config_list_input(ecommerce_data, optimizers):
     test_case = TestCase()
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
-    third_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    third_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([128, 64]))
     multi_optimizers = ml.MultiOptimizer(
         default_optimizer="adam",
         optimizers_and_blocks=[
@@ -268,9 +268,9 @@ def test_multi_optimizers_from_config_list_input(ecommerce_data, optimizers):
 @pytest.mark.parametrize("use_default", [True, False])
 def test_examples_in_code_comments(ecommerce_data, use_default):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([512, 256]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([512, 256]))
-    third_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([64]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([512, 256]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([512, 256]))
+    third_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([64]))
     three_tower = ml.ParallelBlock(
         {"user": user_tower, "item": item_tower, "third": third_tower}, aggregation="concat"
     )
@@ -307,8 +307,8 @@ def test_examples_in_code_comments(ecommerce_data, use_default):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_update_optimizer(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower_0 = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    user_tower_1 = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    user_tower_0 = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    user_tower_1 = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
     two_tower = ml.ParallelBlock({"user": user_tower_0, "item": user_tower_1}, aggregation="concat")
     model = ml.Model(two_tower, ml.BinaryClassificationTask("click"))
     sgd = keras_optimizers.SGD()
@@ -568,8 +568,8 @@ def test_lazy_adam_serialization():
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_lazy_adam_in_model(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
     two_tower = ml.ParallelBlock({"user": user_tower, "item": item_tower}, aggregation="concat")
     model = ml.Model(two_tower, ml.BinaryClassificationTask("click"))
     lazy_adam_optimizer = ml.LazyAdam()
@@ -581,8 +581,8 @@ def test_lazy_adam_in_model(ecommerce_data, run_eagerly):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_lazy_adam_in_model_with_multi_optimizers(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema
-    user_tower = ml.InputBlock(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
-    item_tower = ml.InputBlock(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
+    user_tower = ml.InputBlockV2(schema.select_by_tag(Tags.USER)).connect(ml.MLPBlock([256, 128]))
+    item_tower = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM)).connect(ml.MLPBlock([256, 128]))
     two_tower = ml.ParallelBlock({"user": user_tower, "item": item_tower}, aggregation="concat")
     model = ml.Model(two_tower, ml.BinaryClassificationTask("click"))
     multi_optimizers = ml.MultiOptimizer(

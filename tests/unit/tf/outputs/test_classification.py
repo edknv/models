@@ -25,7 +25,7 @@ from merlin.models.tf.utils import testing_utils
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_binary_output(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([8]),
         mm.BinaryOutput("click"),
     )
@@ -51,7 +51,7 @@ def test_binary_output_two_tasks(ecommerce_data: Dataset, run_eagerly, use_outpu
     else:
         output_block = mm.ParallelBlock(mm.BinaryOutput("click"), mm.BinaryOutput("conversion"))
 
-    model = mm.Model(mm.InputBlock(ecommerce_data.schema), mm.MLPBlock([8]), output_block)
+    model = mm.Model(mm.InputBlockV2(ecommerce_data.schema), mm.MLPBlock([8]), output_block)
 
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
 

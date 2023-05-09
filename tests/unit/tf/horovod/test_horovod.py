@@ -148,7 +148,10 @@ def test_horovod_multigpu_two_tower(
         drop_last=True,
     )
 
-    model = mm.TwoTowerModel(music_streaming_data.schema, query_tower=mm.MLPBlock([2]))
+    query = mm.Encoder(music_streaming_data.schema.select_by_tag(Tags.USER), mm.MLPBlock([2]))
+    candidate = mm.Encoder(music_streaming_data.schema.select_by_tag(Tags.ITEM), mm.MLPBlock([2]))
+
+    model = mm.TwoTowerModelV2(query, candidate)
     model.compile(optimizer="adam", run_eagerly=False)
 
     # model.fit() will hang or terminate with error if all workers don't have

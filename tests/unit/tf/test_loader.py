@@ -294,7 +294,7 @@ def test_validator(batch_size):
 def test_block_with_sparse_inputs(music_streaming_data: Dataset):
     item_id_schema = music_streaming_data.schema.select_by_name(["user_id", "item_genres"])
 
-    inputs = mm.InputBlock(item_id_schema)
+    inputs = mm.InputBlockV2(item_id_schema)
     block = inputs.connect(mm.MLPBlock([64]), context=mm.ModelContext())
 
     df = pd.DataFrame(
@@ -336,9 +336,9 @@ def test_block_with_categorical_target():
     )
     data = Dataset(df, schema=s)
 
-    batch = mm.sample_batch(data, batch_size=2)
-    assert batch[1].shape == (2, 1)
+    batch = mm.sample_batch(data, batch_size=16)
+    assert batch[1].shape == (4, 1)
 
-    inputs = mm.InputBlock(data.schema)
+    inputs = mm.InputBlockV2(data.schema, aggregation=None)
     embeddings = inputs(batch[0])
     assert list(embeddings.keys()) == ["Engaging User", "Author"]

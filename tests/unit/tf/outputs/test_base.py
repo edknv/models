@@ -78,7 +78,7 @@ def test_logits_scaler(ecommerce_data: Dataset):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_parallel_outputs(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([8]),
         mm.ParallelBlock(
             mm.BinaryOutput("click", pre=mm.MLPBlock([4])),

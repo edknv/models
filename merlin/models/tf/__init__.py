@@ -49,7 +49,6 @@ from merlin.models.tf.blocks.retrieval.matrix_factorization import (
     MatrixFactorizationBlock,
     QueryItemIdsEmbeddingsBlock,
 )
-from merlin.models.tf.blocks.retrieval.two_tower import TwoTowerBlock
 from merlin.models.tf.blocks.sampling.base import ItemSampler
 from merlin.models.tf.blocks.sampling.cross_batch import PopularityBasedSampler
 from merlin.models.tf.blocks.sampling.in_batch import InBatchSampler
@@ -76,7 +75,7 @@ from merlin.models.tf.core.combinators import (
 )
 from merlin.models.tf.core.encoder import EmbeddingEncoder, Encoder, TopKEncoder
 from merlin.models.tf.core.prediction import Prediction
-from merlin.models.tf.inputs.base import InputBlock, InputBlockV2
+from merlin.models.tf.inputs.base import InputBlockV2
 from merlin.models.tf.inputs.continuous import Continuous, ContinuousFeatures, ContinuousProjection
 from merlin.models.tf.inputs.embedding import (
     AverageEmbeddingsByWeightFeature,
@@ -105,7 +104,6 @@ from merlin.models.tf.models.ranking import DCNModel, DeepFMModel, DLRMModel, Wi
 from merlin.models.tf.models.retrieval import (
     MatrixFactorizationModel,
     MatrixFactorizationModelV2,
-    TwoTowerModel,
     TwoTowerModelV2,
     YoutubeDNNRetrievalModel,
     YoutubeDNNRetrievalModelV2,
@@ -217,7 +215,6 @@ __all__ = [
     "FeatureConfig",
     "TableConfig",
     "ParallelPredictionBlock",
-    "TwoTowerBlock",
     "MatrixFactorizationBlock",
     "QueryItemIdsEmbeddingsBlock",
     "PrepareFeatures",
@@ -267,7 +264,6 @@ __all__ = [
     "Model",
     "RetrievalModel",
     "RetrievalModelV2",
-    "InputBlock",
     "InputBlockV2",
     "PredictionTasks",
     "StochasticSwapNoise",
@@ -280,7 +276,7 @@ __all__ = [
     "PopularityBasedSampler",
     "FIFOQueue",
     "YoutubeDNNRetrievalModel",
-    "TwoTowerModel",
+    "TwoTowerModelV2",
     "MatrixFactorizationModel",
     "DLRMModel",
     "DCNModel",

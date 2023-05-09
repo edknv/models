@@ -39,7 +39,7 @@ def test_serialization_continuous_features(
 def test_block_context_model_fp16(ecommerce_data: Dataset, run_eagerly: bool, num_epochs=2):
     mixed_precision.set_global_policy("mixed_float16")
     model = ml.Model(
-        ml.InputBlock(ecommerce_data.schema),
+        ml.InputBlockV2(ecommerce_data.schema),
         ml.MLPBlock([32]),
         ml.BinaryClassificationTask("click"),
     )

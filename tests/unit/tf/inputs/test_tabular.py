@@ -25,9 +25,8 @@ from merlin.schema import ColumnSchema, Schema, Tags
 
 
 def test_tabular_features(testing_data: Dataset):
-    tab_module = mm.InputBlock(testing_data.schema)
-
-    outputs = tab_module(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
+    tab_module = mm.InputBlockV2(testing_data.schema, aggregation=None)
+    outputs = tab_module(mm.sample_batch(testing_data, batch_size=16, include_targets=False))
 
     con = testing_data.schema.select_by_tag(Tags.CONTINUOUS).column_names
     cat = testing_data.schema.select_by_tag(Tags.CATEGORICAL).column_names
@@ -36,7 +35,7 @@ def test_tabular_features(testing_data: Dataset):
 
 
 def test_serialization_tabular_features(testing_data: Dataset):
-    inputs = mm.InputBlock(testing_data.schema)
+    inputs = mm.InputBlockV2(testing_data.schema)
 
     copy_layer = testing_utils.assert_serialization(inputs)
 
@@ -44,33 +43,19 @@ def test_serialization_tabular_features(testing_data: Dataset):
 
 
 def test_tabular_features_with_projection(testing_data: Dataset):
-    tab_module = mm.InputBlock(testing_data.schema, continuous_projection=mm.MLPBlock([64]))
+    tab_module = mm.InputBlockV2(
+        testing_data.schema,
+        continuous=mm.ContinuousProjection(
+            testing_data.schema.select_by_tag(Tags.CONTINUOUS), mm.MLPBlock([64])),
+        aggregation=None,
+    )
 
-    outputs = tab_module(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
+    outputs = tab_module(mm.sample_batch(testing_data, batch_size=16, include_targets=False))
     continuous_feature_names = testing_data.schema.select_by_tag(Tags.CONTINUOUS).column_names
 
     assert len(set(continuous_feature_names).intersection(set(outputs.keys()))) == 0
-    assert "continuous_projection" in outputs
-    assert list(outputs["continuous_projection"].shape)[1] == 64
-
-
-@testing_utils.mark_run_eagerly_modes
-@pytest.mark.parametrize("continuous_projection", [None, 128])
-def test_tabular_features_yoochoose_model(
-    music_streaming_data: Dataset, run_eagerly, continuous_projection
-):
-    if continuous_projection:
-        continuous_projection = mm.MLPBlock([continuous_projection])
-    inputs = mm.InputBlock(
-        music_streaming_data.schema,
-        continuous_projection=continuous_projection,
-        aggregation="concat",
-    )
-
-    body = mm.SequentialBlock([inputs, mm.MLPBlock([64])])
-    model = mm.Model(body, mm.BinaryClassificationTask("click"))
-
-    testing_utils.model_test(model, music_streaming_data, run_eagerly=run_eagerly)
+    assert "continuous" in outputs
+    assert list(outputs["continuous"].shape)[1] == 64
 
 
 @testing_utils.mark_run_eagerly_modes

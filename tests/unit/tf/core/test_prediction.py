@@ -29,7 +29,7 @@ def test_layer_with_features_in_model(music_streaming_data: Dataset, run_eagerly
 
     model = mm.Model(
         Dummy(),
-        mm.InputBlock(music_streaming_data.schema),
+        mm.InputBlockV2(music_streaming_data.schema),
         mm.MLPBlock([64]),
         mm.BinaryClassificationTask("click"),
     )
@@ -61,7 +61,7 @@ def test_model_pre_transforming_targets(ecommerce_data: Dataset, run_eagerly):
             return tf.cast(tf.math.logical_not(tf.cast(target, tf.bool)), dtype)
 
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([64]),
         mm.BinaryClassificationTask("click"),
         pre=FlipTargets(),

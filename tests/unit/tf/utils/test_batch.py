@@ -20,7 +20,7 @@ def test_model_encode(ecommerce_data: Dataset, output_type: str, run_eagerly):
     output_task_names = get_task_names_from_outputs(output_block)
 
     model = ml.Model(
-        ml.InputBlock(ecommerce_data.schema),
+        ml.InputBlockV2(ecommerce_data.schema),
         ml.MLPBlock([2]),
         output_block,
     )

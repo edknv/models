@@ -4,12 +4,11 @@ import tensorflow as tf
 
 from merlin.models.tf.blocks.mlp import MLPBlock
 from merlin.models.tf.blocks.retrieval.matrix_factorization import QueryItemIdsEmbeddingsBlock
-from merlin.models.tf.blocks.retrieval.two_tower import TwoTowerBlock
 from merlin.models.tf.blocks.sampling.base import ItemSampler
 from merlin.models.tf.core.base import Block, BlockType
 from merlin.models.tf.core.combinators import ParallelBlock
 from merlin.models.tf.core.encoder import EmbeddingEncoder, Encoder
-from merlin.models.tf.inputs.base import InputBlock
+from merlin.models.tf.inputs.base import InputBlockV2
 from merlin.models.tf.inputs.embedding import EmbeddingOptions
 from merlin.models.tf.models.base import Model, RetrievalModel, RetrievalModelV2
 from merlin.models.tf.models.utils import parse_prediction_tasks
@@ -102,106 +101,6 @@ def MatrixFactorizationModel(
     )
 
     model = RetrievalModel(mf, prediction_tasks)
-
-    return model
-
-
-def TwoTowerModel(
-    schema: Schema,
-    query_tower: Block,
-    item_tower: Optional[Block] = None,
-    query_tower_tag=Tags.USER,
-    item_tower_tag=Tags.ITEM,
-    embedding_options: EmbeddingOptions = EmbeddingOptions(
-        embedding_dims=None,
-        embedding_dim_default=64,
-        infer_embedding_sizes=False,
-        infer_embedding_sizes_multiplier=2.0,
-    ),
-    post: Optional[BlockType] = None,
-    prediction_tasks: Optional[
-        Union[PredictionTask, List[PredictionTask], ParallelPredictionBlock]
-    ] = None,
-    logits_temperature: float = 1.0,
-    samplers: Sequence[ItemSampler] = (),
-    **kwargs,
-) -> RetrievalModel:
-    """Builds the Two-tower architecture, as proposed in [1].
-
-    Example Usage::
-        two_tower = TwoTowerModel(schema, MLPBlock([256, 64]))
-        two_tower.compile(optimizer="adam")
-        two_tower.fit(train_data, epochs=10)
-
-    References
-    ----------
-    [1] Yi, Xinyang, et al.
-        "Sampling-bias-corrected neural modeling for large corpus item recommendations."
-        Proceedings of the 13th ACM Conference on Recommender Systems. 2019.
-
-    Parameters
-    ----------
-    schema: Schema
-        The `Schema` with the input features
-    query_tower: Block
-        The `Block` that combines user features
-    item_tower: Optional[Block], optional
-        The optional `Block` that combines items features.
-        If not provided, a copy of the query_tower is used.
-    query_tower_tag: Tag
-        The tag to select query features, by default `Tags.USER`
-    item_tower_tag: Tag
-        The tag to select item features, by default `Tags.ITEM`
-    embedding_options : EmbeddingOptions
-        Options for the input embeddings.
-        - embedding_dims: Optional[Dict[str, int]] - The dimension of the
-        embedding table for each feature (key), by default {}
-        - embedding_dim_default: int - Default dimension of the embedding
-        table, when the feature is not found in ``embedding_dims``, by default 64
-        - infer_embedding_sizes : bool, Automatically defines the embedding
-        dimension from the feature cardinality in the schema, by default False
-        - infer_embedding_sizes_multiplier: int. Multiplier used by the heuristic
-        to infer the embedding dimension from its cardinality. Generally
-        reasonable values range between 2.0 and 10.0. By default 2.0.
-    post: Optional[Block], optional
-        The optional `Block` to apply on both outputs of Two-tower model
-    prediction_tasks: optional
-        The optional `PredictionTask` or list of `PredictionTask` to apply on the model.
-    logits_temperature: float
-        Parameter used to reduce model overconfidence, so that logits / T.
-        Defaults to 1.
-    loss: Optional[LossType]
-        Loss function.
-        Defaults to `categorical_crossentropy`.
-    samplers: List[ItemSampler]
-        List of samplers for negative sampling, by default `[InBatchSampler()]`
-
-    Returns
-    -------
-    RetrievalModel
-    """
-
-    if not prediction_tasks:
-        prediction_tasks = ItemRetrievalTask(
-            schema,
-            logits_temperature=logits_temperature,
-            samplers=list(samplers),
-            **kwargs,
-        )
-
-    prediction_tasks = parse_prediction_tasks(schema, prediction_tasks)
-    two_tower = TwoTowerBlock(
-        schema=schema,
-        query_tower=query_tower,
-        item_tower=item_tower,
-        query_tower_tag=query_tower_tag,
-        item_tower_tag=item_tower_tag,
-        embedding_options=embedding_options,
-        post=post,
-        **kwargs,
-    )
-
-    model = RetrievalModel(two_tower, prediction_tasks)
 
     return model
 

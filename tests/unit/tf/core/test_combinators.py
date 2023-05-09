@@ -275,7 +275,7 @@ class TestMapValues:
         map_layer = mm.MapValues(tf.keras.layers.Lambda(lambda x: x + 1))
 
         model = mm.Model(
-            mm.InputBlock(music_streaming_data.schema),
+            mm.InputBlockV2(music_streaming_data.schema),
             map_layer,
             mm.MLPBlock([10]),
             mm.BinaryClassificationTask("click"),

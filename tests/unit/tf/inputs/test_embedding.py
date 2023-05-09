@@ -736,7 +736,7 @@ def test_embedding_features_exporting_and_loading_pretrained_initializer(testing
 
 
 def test_shared_embeddings(music_streaming_data: Dataset):
-    inputs = mm.InputBlock(music_streaming_data.schema)
+    inputs = mm.InputBlockV2(music_streaming_data.schema)
 
     embeddings = inputs.select_by_name(Tags.CATEGORICAL.value)
 

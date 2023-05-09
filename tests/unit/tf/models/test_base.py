@@ -62,7 +62,7 @@ class TestGetOutputSchema:
 @pytest.mark.parametrize("run_eagerly", [False])
 def test_simple_model(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([4]),
         mm.BinaryClassificationTask("click"),
     )
@@ -100,23 +100,21 @@ def test_fit_compile_twice():
     [None, mm.BinaryOutput("click"), mm.BinaryClassificationTask("click")],
 )
 def test_model_from_block(ecommerce_data: Dataset, run_eagerly, prediction_block):
-    embedding_options = mm.EmbeddingOptions(embedding_dim_default=2)
     model = mm.Model.from_block(
         mm.MLPBlock([4]),
         ecommerce_data.schema,
         prediction_tasks=prediction_block,
-        embedding_options=embedding_options,
+        categorical=mm.Embeddings(ecommerce_data.schema.select_by_tag(Tags.CATEGORICAL), dim=2),
     )
-
     assert all(
-        [f.table.dim == 2 for f in list(model.blocks[0]["categorical"].feature_config.values())]
+        [f.table.output_dim == 2 for f in model.blocks[0]["categorical"].parallel_values]
     )
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
 
 
 def test_block_from_model_with_input(ecommerce_data: Dataset):
-    inputs = mm.InputBlock(ecommerce_data.schema)
+    inputs = mm.InputBlockV2(ecommerce_data.schema)
     block = inputs.connect(mm.MLPBlock([2]))
 
     with pytest.raises(ValueError) as excinfo:
@@ -238,7 +236,7 @@ def test_train_metrics_steps(
 ):
     dataset = generate_data("e-commerce", num_rows=num_rows)
     model = mm.Model(
-        mm.InputBlock(dataset.schema),
+        mm.InputBlockV2(dataset.schema),
         mm.MLPBlock([64]),
         mm.BinaryClassificationTask("click"),
     )
@@ -270,7 +268,7 @@ def test_train_metrics_steps(
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_model_pre_post(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([4]),
         mm.BinaryClassificationTask("click"),
         post=mm.NoOp(),
@@ -292,7 +290,7 @@ def test_sub_class_model(ecommerce_data: Dataset):
         def __init__(self, schema: Schema, target: str, **kwargs):
             super(SubClassedModel, self).__init__()
             if "input_block" not in kwargs:
-                self.input_block = mm.InputBlock(schema)
+                self.input_block = mm.InputBlockV2(schema)
                 self.mlp = mm.MLPBlock([4])
                 self.prediction = mm.BinaryClassificationTask(target)
             else:
@@ -945,7 +943,7 @@ def _check_embeddings(embeddings, extected_len, index_name=None):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_model_fit_pre(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([4]),
         mm.BinaryClassificationTask("click"),
     )

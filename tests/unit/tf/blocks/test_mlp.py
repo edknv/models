@@ -44,7 +44,7 @@ def test_mlp_block(
     bias_regularizer="l1",
     activity_regularizer=regularizers.l2(1e-4),
 ):
-    inputs = ml.InputBlock(testing_data.schema)
+    inputs = ml.InputBlockV2(testing_data.schema)
 
     mlp = ml.MLPBlock(
         [dim],

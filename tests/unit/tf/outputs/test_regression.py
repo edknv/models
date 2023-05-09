@@ -23,7 +23,7 @@ from merlin.models.tf.utils import testing_utils
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_regression_output(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlock(ecommerce_data.schema),
+        mm.InputBlockV2(ecommerce_data.schema),
         mm.MLPBlock([8]),
         mm.RegressionOutput("click"),
     )

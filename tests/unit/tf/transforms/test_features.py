@@ -44,7 +44,7 @@ def test_categorical_encoding_in_model(ecommerce_data: Dataset, run_eagerly):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     branches = {
         "one_hot": mm.CategoryEncoding(schema, is_input=True),
-        "features": mm.InputBlock(ecommerce_data.schema),
+        "features": mm.InputBlockV2(ecommerce_data.schema),
     }
     body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([32]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
@@ -346,7 +346,7 @@ def test_hashedcross_in_model(ecommerce_data: Dataset, run_eagerly):
     cross_schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
     branches = {
         "cross_product": mm.HashedCross(cross_schema, num_bins=1000, is_input=True),
-        "features": mm.InputBlock(ecommerce_data.schema),
+        "features": mm.InputBlockV2(ecommerce_data.schema),
     }
     body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
@@ -697,7 +697,7 @@ def test_hashedcrossall_in_model(ecommerce_data: Dataset, run_eagerly):
     )
     branches = {
         "cross_product": mm.HashedCrossAll(cross_schema, max_num_bins=1000, infer_num_bins=True),
-        "features": mm.InputBlock(ecommerce_data.schema),
+        "features": mm.InputBlockV2(ecommerce_data.schema),
     }
     body = mm.ParallelBlock(branches, is_input=True).connect(mm.MLPBlock([64]))
     model = mm.Model(body, mm.BinaryClassificationTask("click"))

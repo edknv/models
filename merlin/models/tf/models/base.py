@@ -49,7 +49,7 @@ from merlin.models.tf.core.combinators import ParallelBlock, SequentialBlock
 from merlin.models.tf.core.prediction import Prediction, PredictionContext, TensorLike
 from merlin.models.tf.core.tabular import TabularBlock
 from merlin.models.tf.distributed.backend import hvd, hvd_installed
-from merlin.models.tf.inputs.base import InputBlock
+from merlin.models.tf.inputs.base import InputBlockV2
 from merlin.models.tf.loader import Loader
 from merlin.models.tf.losses.base import loss_registry
 from merlin.models.tf.metrics import metrics_registry
@@ -1848,7 +1848,7 @@ class Model(BaseModel):
                 raise ValueError("The block already includes an InputBlock")
             input_block = block.first
 
-        _input_block: Block = input_block or InputBlock(schema, aggregation=aggregation, **kwargs)
+        _input_block: Block = input_block or InputBlockV2(schema, aggregation=aggregation, **kwargs)
 
         prediction_tasks = parse_prediction_blocks(schema, prediction_tasks)
 

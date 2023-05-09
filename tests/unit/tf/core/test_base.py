@@ -52,7 +52,7 @@ class DummyFeaturesBlock(ml.Block):
 @pytest.mark.parametrize("run_eagerly", [True])
 def test_block_context_model(ecommerce_data: Dataset, run_eagerly: bool):
     model = ml.Model(
-        ml.InputBlock(ecommerce_data.schema),
+        ml.InputBlockV2(ecommerce_data.schema),
         ml.MLPBlock([64]),
         DummyFeaturesBlock(),
         ml.BinaryClassificationTask("click"),

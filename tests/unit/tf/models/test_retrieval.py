@@ -62,14 +62,13 @@ def test_two_tower_shared_embeddings():
     schema = train.schema
 
     input_block = mm.InputBlockV2(schema)
-    item_tower = input_block.select_by_tag(Tags.ITEM)
-    query_tower = input_block.select_by_tag(Tags.USER)
+    item_tower = mm.Encoder(schema.select_by_tag(Tags.ITEM), mm.MLPBlock([256, 128]))
+    query_tower = mm.Encoder(schema.select_by_tag(Tags.USER), mm.MLPBlock([256, 128]))
 
-    model = mm.TwoTowerModel(
-        schema,
-        query_tower=query_tower.connect(mm.MLPBlock([256, 128], no_activation_last_layer=True)),
-        item_tower=item_tower.connect(mm.MLPBlock([256, 128], no_activation_last_layer=True)),
-        samplers=[mm.InBatchSampler()],
+    model = mm.TwoTowerModelV2(
+        query_tower=query_tower,
+        candidate_tower=item_tower,
+        negative_samplers=["in-batch"],
     )
 
     model.compile(optimizer="adam", run_eagerly=False, metrics=[])
@@ -199,68 +198,6 @@ def test_matrix_factorization_model_v2_save(tmpdir, testing_data: Dataset):
 
 
 @pytest.mark.parametrize("run_eagerly", [True, False])
-def test_two_tower_model(music_streaming_data: Dataset, run_eagerly, num_epochs=2):
-    music_streaming_data.schema = music_streaming_data.schema.select_by_name(
-        ["item_id", "user_genres"]
-    )
-
-    model = mm.TwoTowerModel(music_streaming_data.schema, query_tower=mm.MLPBlock([2]))
-    model.compile(optimizer="adam", run_eagerly=run_eagerly)
-
-    losses = model.fit(music_streaming_data, batch_size=50, epochs=num_epochs, steps_per_epoch=1)
-    assert len(losses.epoch) == num_epochs
-    assert all(measure >= 0 for metric in losses.history for measure in losses.history[metric])
-
-    query_features = expected_input_cols_from_schema(
-        music_streaming_data.schema.select_by_tag(Tags.USER),
-    )
-    testing_utils.test_model_signature(model.first.query_block(), query_features, ["output_1"])
-
-    item_features = expected_input_cols_from_schema(
-        music_streaming_data.schema.select_by_tag(Tags.ITEM),
-    )
-    testing_utils.test_model_signature(model.first.item_block(), item_features, ["output_1"])
-
-
-@pytest.mark.parametrize("run_eagerly", [True, False])
-def test_two_tower_retrieval_model_evaluate_after_fit_validation_should_raise(
-    ecommerce_data: Dataset, run_eagerly
-):
-    ecommerce_data.schema = ecommerce_data.schema.remove_by_tag(Tags.TARGET)
-    df = ecommerce_data.to_ddf().compute()
-    train_ds = Dataset(df[: len(df) // 2], schema=ecommerce_data.schema)
-    eval_ds = Dataset(df[len(df) // 2 :], schema=ecommerce_data.schema)
-
-    model = mm.TwoTowerModel(
-        schema=ecommerce_data.schema,
-        query_tower=mm.MLPBlock([128, 64]),
-        samplers=[mm.InBatchSampler()],
-    )
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
-    model.compile(optimizer=opt, run_eagerly=run_eagerly)
-
-    num_epochs = 3
-    losses = model.fit(
-        train_ds,
-        batch_size=64,
-        epochs=num_epochs,
-        train_metrics_steps=3,
-        validation_data=eval_ds,
-        validation_steps=3,
-    )
-
-    expected_metrics = ["recall_at_10", "mrr_at_10", "ndcg_at_10", "map_at_10", "precision_at_10"]
-    expected_loss_metrics = ["loss", "loss_batch", "regularization_loss"]
-    expected_metrics_all = expected_metrics + expected_loss_metrics
-    expected_metrics_valid = [f"val_{k}" for k in expected_metrics_all]
-    assert set(losses.history.keys()) == set(expected_metrics_all + expected_metrics_valid)
-
-    with pytest.raises(Exception) as exc_info:
-        _ = model.evaluate(eval_ds, item_corpus=train_ds, batch_size=10, return_dict=True)
-    assert "The model.evaluate() was called before without `item_corpus`" in str(exc_info.value)
-
-
-@pytest.mark.parametrize("run_eagerly", [True, False])
 def test_two_tower_model_v2(music_streaming_data: Dataset, run_eagerly, num_epochs=2):
     music_streaming_data.schema = music_streaming_data.schema.select_by_name(
         ["item_id", "user_genres"]
@@ -305,23 +242,6 @@ def test_two_tower_model_with_different_tasks(ecommerce_data: Dataset, run_eager
     assert all(measure >= 0 for metric in losses.history for measure in losses.history[metric])
 
 
-def test_two_tower_model_save(tmpdir, ecommerce_data: Dataset):
-    dataset = ecommerce_data
-    schema = dataset.schema
-    model = mm.TwoTowerModel(
-        schema,
-        query_tower=mm.MLPBlock([4], no_activation_last_layer=True),
-        samplers=[mm.InBatchSampler()],
-        embedding_options=mm.EmbeddingOptions(infer_embedding_sizes=True),
-    )
-
-    testing_utils.model_test(model, dataset, reload_model=True)
-
-    query_tower = model.retrieval_block.query_block()
-    query_tower_path = Path(tmpdir) / "query_tower"
-    query_tower.save(query_tower_path)
-
-
 def test_two_tower_model_v2_save(tmpdir, ecommerce_data: Dataset):
     dataset = ecommerce_data
     schema = dataset.schema
@@ -342,30 +262,6 @@ def test_two_tower_model_v2_save(tmpdir, ecommerce_data: Dataset):
     query_tower = model.query_encoder
     query_tower_path = Path(tmpdir) / "query_tower"
     query_tower.save(query_tower_path)
-
-
-def test_two_tower_model_l2_reg(testing_data: Dataset):
-    testing_data.schema = testing_data.schema.excluding_by_name(["event_timestamp"])
-
-    model = mm.TwoTowerModel(
-        testing_data.schema,
-        query_tower=mm.MLPBlock([2]),
-        embedding_options=mm.EmbeddingOptions(
-            embedding_dim_default=2,
-            embeddings_l2_reg=0.1,
-        ),
-    )
-
-    _ = model(mm.sample_batch(testing_data, batch_size=10, include_targets=False))
-
-    l2_emb_losses = model.losses
-
-    assert len(l2_emb_losses) == len(
-        testing_data.schema.select_by_tag(Tags.CATEGORICAL)
-    ), "The number of reg losses should be 4 (for user and item categorical features)"
-
-    for reg_loss in l2_emb_losses:
-        assert reg_loss > 0.0
 
 
 def test_two_tower_model_v2_l2_reg(testing_data: Dataset):
@@ -433,93 +329,6 @@ def test_two_tower_model_topk_evaluation(ecommerce_data: Dataset, run_eagerly):
 
     metrics = topk_model.evaluate(loader, return_dict=True)
     assert all([metric >= 0 for metric in metrics.values()])
-
-
-@pytest.mark.parametrize("run_eagerly", [True, False])
-@pytest.mark.parametrize("logits_pop_logq_correction", [True, False])
-@pytest.mark.parametrize("loss", ["categorical_crossentropy", "bpr-max", "binary_crossentropy"])
-def test_two_tower_model_with_custom_options(
-    ecommerce_data: Dataset,
-    run_eagerly,
-    logits_pop_logq_correction,
-    loss,
-):
-    from tensorflow.keras import regularizers
-
-    from merlin.models.tf.transforms.bias import PopularityLogitsCorrection
-    from merlin.models.utils import schema_utils
-
-    data = ecommerce_data
-    data.schema = data.schema.select_by_name(["user_categories", "item_id"])
-
-    metrics = [
-        tf.keras.metrics.AUC(from_logits=True, name="auc"),
-        mm.RecallAt(5),
-        mm.RecallAt(10),
-        mm.MRRAt(10),
-        mm.NDCGAt(10),
-    ]
-
-    post_logits = None
-    if logits_pop_logq_correction:
-        cardinalities = schema_utils.categorical_cardinalities(data.schema)
-        item_id_cardinalities = cardinalities[
-            data.schema.select_by_tag(Tags.ITEM_ID).column_names[0]
-        ]
-        items_frequencies = tf.sort(
-            tf.random.uniform((item_id_cardinalities,), minval=0, maxval=1000, dtype=tf.int32)
-        )
-        post_logits = PopularityLogitsCorrection(
-            items_frequencies,
-            schema=data.schema,
-        )
-
-    retrieval_task = mm.ItemRetrievalTask(
-        samplers=[mm.InBatchSampler()],
-        schema=data.schema,
-        logits_temperature=0.1,
-        post_logits=post_logits,
-        store_negative_ids=True,
-    )
-
-    model = mm.TwoTowerModel(
-        data.schema,
-        query_tower=mm.MLPBlock(
-            [2],
-            activation="relu",
-            no_activation_last_layer=True,
-            dropout=0.1,
-            kernel_regularizer=regularizers.l2(1e-5),
-            bias_regularizer=regularizers.l2(1e-6),
-        ),
-        embedding_options=mm.EmbeddingOptions(
-            infer_embedding_sizes=True,
-            infer_embedding_sizes_multiplier=3.0,
-            infer_embeddings_ensure_dim_multiple_of_8=True,
-            embeddings_l2_reg=1e-5,
-        ),
-        prediction_tasks=retrieval_task,
-    )
-
-    model.compile(optimizer="adam", run_eagerly=run_eagerly, loss=loss, metrics=metrics)
-
-    losses = model.fit(data, batch_size=50, epochs=1, steps_per_epoch=1)
-    assert len(losses.epoch) == 1
-    assert all(measure >= 0 for metric in losses.history for measure in losses.history[metric])
-
-    metrics = model.evaluate(data, batch_size=10, item_corpus=data, return_dict=True, steps=1)
-    assert set(metrics.keys()) == set(
-        [
-            "loss",
-            "loss_batch",
-            "regularization_loss",
-            "auc",
-            "recall_at_5",
-            "recall_at_10",
-            "mrr_at_10",
-            "ndcg_at_10",
-        ]
-    )
 
 
 @pytest.mark.parametrize("run_eagerly", [True, False])
@@ -631,81 +440,6 @@ def test_two_tower_model_v2_with_custom_options(
 
 
 @pytest.mark.parametrize("run_eagerly", [True, False])
-@pytest.mark.parametrize(
-    "loss", ["categorical_crossentropy", "bpr", "bpr-max", "binary_crossentropy"]
-)
-def test_two_tower_retrieval_model_with_metrics(ecommerce_data: Dataset, run_eagerly, loss):
-    ecommerce_data.schema = ecommerce_data.schema.select_by_name(["user_categories", "item_id"])
-
-    metrics = [RecallAt(5), MRRAt(5), NDCGAt(5), AvgPrecisionAt(5), PrecisionAt(5)]
-    model = mm.TwoTowerModel(schema=ecommerce_data.schema, query_tower=mm.MLPBlock([4]))
-    model.compile(optimizer="adam", run_eagerly=run_eagerly, metrics=metrics, loss=loss)
-
-    # Training
-    losses = model.fit(
-        ecommerce_data,
-        batch_size=10,
-        epochs=1,
-        steps_per_epoch=1,
-        train_metrics_steps=3,
-    )
-    assert len(losses.epoch) == 1
-
-    # Checking train metrics
-    expected_metrics = ["recall_at_5", "mrr_at_5", "ndcg_at_5", "map_at_5", "precision_at_5"]
-    expected_loss_metrics = ["loss", "loss_batch", "regularization_loss"]
-    expected_metrics_all = expected_metrics + expected_loss_metrics
-    assert set(losses.history.keys()) == set(expected_metrics_all)
-
-    # TODO: This fails sometimes now
-    # for metric_name in expected_metrics + expected_loss_metrics:
-    #     assert len(losses.history[metric_name]) == num_epochs
-    #     if metric_name in expected_metrics:
-    #         assert losses.history[metric_name][1] >= losses.history[metric_name][0]
-    #     elif metric_name in expected_loss_metrics:
-    #         assert losses.history[metric_name][1] <= losses.history[metric_name][0]
-
-    metrics = model.evaluate(
-        ecommerce_data, batch_size=10, item_corpus=ecommerce_data, return_dict=True, steps=1
-    )
-    assert set(metrics.keys()) == set(expected_metrics_all)
-
-
-@pytest.mark.parametrize("run_eagerly", [True, False])
-def test_two_tower_retrieval_model_with_topk_metrics_aggregator(
-    ecommerce_data: Dataset, run_eagerly
-):
-    ecommerce_data.schema = ecommerce_data.schema.select_by_name(["user_categories", "item_id"])
-
-    metrics_agg = TopKMetricsAggregator(
-        RecallAt(5), MRRAt(5), NDCGAt(5), AvgPrecisionAt(5), PrecisionAt(5)
-    )
-    model = mm.TwoTowerModel(schema=ecommerce_data.schema, query_tower=mm.MLPBlock([4]))
-    model.compile(optimizer="adam", run_eagerly=run_eagerly, metrics=[metrics_agg])
-
-    # Training
-    losses = model.fit(
-        ecommerce_data,
-        batch_size=10,
-        epochs=1,
-        steps_per_epoch=1,
-        train_metrics_steps=3,
-    )
-    assert len(losses.epoch) == 1
-
-    # Checking train metrics
-    expected_metrics = ["recall_at_5", "mrr_at_5", "ndcg_at_5", "map_at_5", "precision_at_5"]
-    expected_loss_metrics = ["loss", "loss_batch", "regularization_loss"]
-    expected_metrics_all = expected_metrics + expected_loss_metrics
-    assert set(losses.history.keys()) == set(expected_metrics_all)
-
-    metrics = model.evaluate(
-        ecommerce_data, batch_size=10, item_corpus=ecommerce_data, return_dict=True, steps=1
-    )
-    assert set(metrics.keys()) == set(expected_metrics_all)
-
-
-@pytest.mark.parametrize("run_eagerly", [True, False])
 def test_two_tower_retrieval_model_v2_with_topk_metrics_aggregator(
     ecommerce_data: Dataset, run_eagerly
 ):
@@ -763,6 +497,7 @@ def test_two_tower_advanced_options(ecommerce_data):
         eval_batch_size=16,
         topk_metrics_cutoffs="10",
         log_to_wandb=False,
+        retrieval_api_version=2
     )
     assert metrics["loss-final"] > 0.0
     assert metrics["runtime_sec-final"] > 0.0
@@ -788,17 +523,6 @@ def test_mf_advanced_options(ecommerce_data):
     assert metrics["runtime_sec-final"] > 0.0
     assert metrics["avg_examples_per_sec-final"] > 0.0
     assert metrics["recall_at_10-final"] > 0.0
-
-
-# def test_retrieval_evaluation_without_negatives(ecommerce_data: Dataset):
-#     model = mm.TwoTowerModel(schema=ecommerce_data.schema, query_tower=mm.MLPBlock([64]))
-#     model.compile(optimizer="adam", run_eagerly=True)
-#     model.fit(ecommerce_data, batch_size=50)
-#     with pytest.raises(ValueError) as exc_info:
-#         model.evaluate(ecommerce_data, batch_size=10)
-#         assert "You need to specify the set of negatives to use for evaluation" in str(
-#             exc_info.value
-#         )
 
 
 @pytest.mark.skip(

@@ -108,7 +108,7 @@ def test_contrastive_output_with_sampled_softmax(ecommerce_data: Dataset, run_ea
     )
     ecommerce_data.schema = schema
     model = mm.Model(
-        mm.InputBlock(schema),
+        mm.InputBlockV2(schema),
         mm.MLPBlock([8]),
         mm.ContrastiveOutput(
             schema["item_category"],
