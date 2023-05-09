@@ -61,7 +61,7 @@ def test_two_tower_shared_embeddings():
     train = workflow.transform(train_dataset)
     schema = train.schema
 
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     item_tower = input_block.select_by_tag(Tags.ITEM)
     query_tower = input_block.select_by_tag(Tags.USER)
 
@@ -372,7 +372,7 @@ def test_two_tower_model_v2_l2_reg(testing_data: Dataset):
     testing_data.schema = testing_data.schema.excluding_by_name(["event_timestamp"])
 
     user_schema = testing_data.schema.select_by_tag(Tags.USER)
-    user_inputs = mm.InputBlockV2(
+    user_inputs = mm.InputBlock(
         user_schema,
         categorical=mm.Embeddings(
             user_schema.select_by_tag(Tags.CATEGORICAL),
@@ -383,7 +383,7 @@ def test_two_tower_model_v2_l2_reg(testing_data: Dataset):
     query = mm.Encoder(user_inputs, mm.MLPBlock([4], no_activation_last_layer=True))
 
     item_schema = testing_data.schema.select_by_tag(Tags.ITEM)
-    item_inputs = mm.InputBlockV2(
+    item_inputs = mm.InputBlock(
         item_schema,
         categorical=mm.Embeddings(
             item_schema.select_by_tag(Tags.CATEGORICAL),
@@ -566,7 +566,7 @@ def test_two_tower_model_v2_with_custom_options(
             schema=data.schema,
         )
 
-    user_inputs = mm.InputBlockV2(
+    user_inputs = mm.InputBlock(
         user_schema,
         categorical=mm.Embeddings(
             user_schema.select_by_tag(Tags.CATEGORICAL),
@@ -585,7 +585,7 @@ def test_two_tower_model_v2_with_custom_options(
     )
     query = mm.Encoder(user_inputs, tower_block)
 
-    item_inputs = mm.InputBlockV2(
+    item_inputs = mm.InputBlock(
         item_schema,
         categorical=mm.Embeddings(
             item_schema.select_by_tag(Tags.CATEGORICAL),

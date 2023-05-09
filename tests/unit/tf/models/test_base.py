@@ -100,16 +100,15 @@ def test_fit_compile_twice():
     [None, mm.BinaryOutput("click"), mm.BinaryClassificationTask("click")],
 )
 def test_model_from_block(ecommerce_data: Dataset, run_eagerly, prediction_block):
-    embedding_options = mm.EmbeddingOptions(embedding_dim_default=2)
     model = mm.Model.from_block(
         mm.MLPBlock([4]),
         ecommerce_data.schema,
         prediction_tasks=prediction_block,
-        embedding_options=embedding_options,
+        categorical=mm.Embeddings(ecommerce_data.schema.select_by_tag(Tags.CATEGORICAL), dim=2),
     )
 
     assert all(
-        [f.table.dim == 2 for f in list(model.blocks[0]["categorical"].feature_config.values())]
+        [f.table.output_dim == 2 for f in model.blocks[0]["categorical"].parallel_values]
     )
 
     testing_utils.model_test(model, ecommerce_data, run_eagerly=run_eagerly)
@@ -145,7 +144,7 @@ def test_simple_seq_model_with_custom_emb_combiner(sequence_testing_data: Datase
     loader = mm.Loader(Dataset(data, schema=schema), batch_size=100)
 
     # Define the input block with a weighted average embeddings combiner
-    input_block_weighed_avg_model = mm.InputBlockV2(
+    input_block_weighed_avg_model = mm.InputBlock(
         schema,
         categorical=mm.Embeddings(
             schema.select_by_tag(Tags.CATEGORICAL),
@@ -324,7 +323,7 @@ def test_sub_class_model(ecommerce_data: Dataset):
 def test_find_blocks_and_sub_blocks(ecommerce_data):
     test_case = TestCase()
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     layer_1 = mm.MLPBlock([64], name="layer_1")
     layer_2 = mm.MLPBlock([1], no_activation_last_layer=True, name="layer_2")
     two_layer = mm.SequentialBlock([layer_1, layer_2], name="two_layers")
@@ -399,7 +398,7 @@ def test_freeze_parallel_block(ecommerce_data, run_eagerly):
     schema = ecommerce_data.schema.select_by_name(
         names=["user_categories", "item_category", "click"]
     )
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     layer_1 = mm.MLPBlock([64], name="layer_1")
     body = input_block.connect(layer_1)
 
@@ -493,7 +492,7 @@ def test_freeze_parallel_block(ecommerce_data, run_eagerly):
 def test_freeze_sequential_block(ecommerce_data):
     test_case = TestCase()
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     layer_1 = mm.MLPBlock([64], name="layer_1")
     layer_2 = mm.MLPBlock([1], no_activation_last_layer=True, name="layer_2")
     two_layer = mm.SequentialBlock([layer_1, layer_2], name="two_layers")
@@ -593,7 +592,7 @@ def test_freeze_sequential_block(ecommerce_data):
 
 def test_freeze_unfreeze(ecommerce_data):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     layer_1 = mm.MLPBlock([64], name="layer_1")
     layer_2 = mm.MLPBlock([1], no_activation_last_layer=True, name="layer_2")
     two_layer = mm.SequentialBlock([layer_1, layer_2], name="two_layers")
@@ -673,7 +672,7 @@ def test_freeze_unfreeze(ecommerce_data):
 
 def test_unfreeze_all_blocks(ecommerce_data):
     schema = ecommerce_data.schema.select_by_name(names=["user_categories", "item_category"])
-    input_block = mm.InputBlockV2(schema)
+    input_block = mm.InputBlock(schema)
     layer_1 = mm.MLPBlock([64], name="layer_1")
     layer_2 = mm.MLPBlock([1], no_activation_last_layer=True, name="layer_2")
     two_layer = mm.SequentialBlock([layer_1, layer_2], name="two_layers")
@@ -788,7 +787,7 @@ class TestModelInputFeatures:
         input_schema = dataset.schema.select_by_name(["a"])
         dataset.schema = dataset.schema.select_by_name(["a", "click"])
         model = mm.Model(
-            mm.InputBlockV2(input_schema),
+            mm.InputBlock(input_schema),
             mm.MLPBlock([4]),
             mm.BinaryClassificationTask("click"),
         )
@@ -803,7 +802,7 @@ class TestModelInputFeatures:
         dataset = self._get_dataset()
         input_schema = dataset.schema.select_by_name(["a"])
         model = mm.Model(
-            mm.InputBlockV2(input_schema),
+            mm.InputBlock(input_schema),
             mm.MLPBlock([4]),
             mm.BinaryClassificationTask("click"),
         )
@@ -821,7 +820,7 @@ def test_pickle():
     dataset = generate_data("e-commerce", num_rows=10)
     dataset.schema = dataset.schema.select_by_name(["click", "user_age"])
     model = mm.Model(
-        mm.InputBlockV2(dataset.schema.remove_by_tag(Tags.TARGET)),
+        mm.InputBlock(dataset.schema.remove_by_tag(Tags.TARGET)),
         mm.MLPBlock([4]),
         mm.BinaryClassificationTask("click"),
     )
@@ -845,7 +844,7 @@ def test_save_and_load(tmpdir):
     input_schema = dataset.schema.select_by_name(["user_age"])
     dataset.schema = dataset.schema.select_by_name(["user_age", "click"])
     model = mm.Model(
-        mm.InputBlockV2(input_schema),
+        mm.InputBlock(input_schema),
         mm.MLPBlock([4]),
         mm.BinaryClassificationTask("click"),
     )
@@ -1051,7 +1050,7 @@ def test_categorical_prediction_with_temperature(sequence_testing_data: Dataset)
     train = sequence_testing_data
     train.schema = train.schema.select_by_name(["item_id_seq", "user_country"])
     schema_model = train.schema.select_by_name(["item_id_seq"])
-    inputs = mm.InputBlockV2(
+    inputs = mm.InputBlock(
         schema_model,
         categorical=mm.Embeddings(
             schema_model,

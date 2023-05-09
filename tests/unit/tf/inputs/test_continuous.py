@@ -58,11 +58,11 @@ def test_continuous_features_yoochoose_model(music_streaming_data: Dataset, run_
 
 
 @pytest.mark.parametrize("run_eagerly", [True, False])
-def test_inputv2_without_categorical_features(music_streaming_data: Dataset, run_eagerly):
+def test_input_without_categorical_features(music_streaming_data: Dataset, run_eagerly):
     schema = music_streaming_data.schema.select_by_tag(Tags.CONTINUOUS)
     music_streaming_data.schema = schema
 
-    inputs = ml.InputBlockV2(schema)
+    inputs = ml.InputBlock(schema)
 
     batch = ml.sample_batch(
         music_streaming_data, batch_size=100, include_targets=False, prepare_features=True

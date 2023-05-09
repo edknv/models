@@ -36,7 +36,7 @@ from merlin.schema import Schema, Tags, TagsType
 LOG = logging.getLogger("merlin-models")
 
 
-def InputBlock(
+def InputBlockLegacy(
     schema: Schema,
     branches: Optional[Dict[str, Block]] = None,
     pre: Optional[BlockType] = None,
@@ -209,7 +209,7 @@ INPUT_TAG_TO_BLOCK: Dict[Tags, Callable[[Schema], Layer]] = {
 }
 
 
-def InputBlockV2(
+def InputBlock(
     schema: Optional[Schema] = None,
     categorical: Union[Tags, Layer] = Tags.CATEGORICAL,
     continuous: Union[Tags, Layer] = Tags.CONTINUOUS,
@@ -225,29 +225,29 @@ def InputBlockV2(
     the external definition of `embeddings` block. After `22.10` this will become the default.
 
     Simple Usage::
-        inputs = InputBlockV2(schema)
+        inputs = InputBlock(schema)
 
     Custom Embeddings::
-        inputs = InputBlockV2(
+        inputs = InputBlock(
             schema,
             categorical=Embeddings(schema, dim=32)
         )
 
     Sparse outputs for one-hot::
-        inputs = InputBlockV2(
+        inputs = InputBlock(
             schema,
             categorical=CategoryEncoding(schema, sparse=True),
             post=ToSparse()
         )
 
     Add continuous projection::
-        inputs = InputBlockV2(
+        inputs = InputBlock(
             schema,
             continuous=ContinuousProjection(continuous_schema, MLPBlock([32])),
         )
 
     Merge 2D and 3D (for session-based)::
-        inputs = InputBlockV2(
+        inputs = InputBlock(
             schema,
             post=BroadcastToSequence(context_schema, sequence_schema)
         )

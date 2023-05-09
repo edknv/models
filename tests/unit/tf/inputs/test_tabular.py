@@ -25,7 +25,7 @@ from merlin.schema import ColumnSchema, Schema, Tags
 
 
 def test_tabular_features(testing_data: Dataset):
-    tab_module = mm.InputBlock(testing_data.schema)
+    tab_module = mm.InputBlock(testing_data.schema, aggregation=None)
 
     outputs = tab_module(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
 
@@ -44,38 +44,24 @@ def test_serialization_tabular_features(testing_data: Dataset):
 
 
 def test_tabular_features_with_projection(testing_data: Dataset):
-    tab_module = mm.InputBlock(testing_data.schema, continuous_projection=mm.MLPBlock([64]))
+    tab_module = mm.InputBlock(
+        testing_data.schema,
+        continuous=mm.ContinuousProjection(
+            testing_data.schema.select_by_tag(Tags.CONTINUOUS), mm.MLPBlock([64])),
+        aggregation=None,
+    )
 
     outputs = tab_module(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
     continuous_feature_names = testing_data.schema.select_by_tag(Tags.CONTINUOUS).column_names
 
     assert len(set(continuous_feature_names).intersection(set(outputs.keys()))) == 0
-    assert "continuous_projection" in outputs
-    assert list(outputs["continuous_projection"].shape)[1] == 64
+    assert "continuous" in outputs
+    assert list(outputs["continuous"].shape)[1] == 64
 
 
 @testing_utils.mark_run_eagerly_modes
 @pytest.mark.parametrize("continuous_projection", [None, 128])
-def test_tabular_features_yoochoose_model(
-    music_streaming_data: Dataset, run_eagerly, continuous_projection
-):
-    if continuous_projection:
-        continuous_projection = mm.MLPBlock([continuous_projection])
-    inputs = mm.InputBlock(
-        music_streaming_data.schema,
-        continuous_projection=continuous_projection,
-        aggregation="concat",
-    )
-
-    body = mm.SequentialBlock([inputs, mm.MLPBlock([64])])
-    model = mm.Model(body, mm.BinaryClassificationTask("click"))
-
-    testing_utils.model_test(model, music_streaming_data, run_eagerly=run_eagerly)
-
-
-@testing_utils.mark_run_eagerly_modes
-@pytest.mark.parametrize("continuous_projection", [None, 128])
-def test_tabular_features_yoochoose_model_inputblockv2(
+def test_tabular_features_yoochoose_model_inputblock(
     music_streaming_data: Dataset, run_eagerly, continuous_projection
 ):
     kwargs = {}
@@ -85,7 +71,7 @@ def test_tabular_features_yoochoose_model_inputblockv2(
             mm.MLPBlock([continuous_projection]),
         )
 
-    inputs = mm.InputBlockV2(music_streaming_data.schema, aggregation="concat", **kwargs)
+    inputs = mm.InputBlock(music_streaming_data.schema, aggregation="concat", **kwargs)
 
     body = mm.SequentialBlock([inputs, mm.MLPBlock([64])])
     model = mm.Model(body, mm.BinaryClassificationTask("click"))
@@ -94,7 +80,7 @@ def test_tabular_features_yoochoose_model_inputblockv2(
 
 
 def test_tabular_seq_features_ragged_embeddings(sequence_testing_data: Dataset):
-    tab_module = mm.InputBlockV2(
+    tab_module = mm.InputBlock(
         sequence_testing_data.schema,
         categorical=mm.Embeddings(
             sequence_testing_data.schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
@@ -121,7 +107,7 @@ def test_tabular_seq_features_ragged_embeddings(sequence_testing_data: Dataset):
 )
 def test_tabular_seq_features_ragged_emb_combiner(sequence_testing_data: Dataset, seq_combiner):
     con2d = sequence_testing_data.schema.select_by_tag(Tags.CONTINUOUS).remove_by_tag(Tags.SEQUENCE)
-    input_block = mm.InputBlockV2(
+    input_block = mm.InputBlock(
         sequence_testing_data.schema,
         categorical=mm.Embeddings(
             sequence_testing_data.schema.select_by_tag(Tags.CATEGORICAL),
@@ -155,7 +141,7 @@ def test_tabular_seq_features_ragged_custom_emb_combiner(sequence_testing_data: 
         row_splits_dtype=batch["item_id_seq"].row_splits.dtype,
     )
 
-    input_block_weighed_avg = mm.InputBlockV2(
+    input_block_weighed_avg = mm.InputBlock(
         schema,
         categorical=mm.Embeddings(
             schema.select_by_tag(Tags.CATEGORICAL),
@@ -168,7 +154,7 @@ def test_tabular_seq_features_ragged_custom_emb_combiner(sequence_testing_data: 
 
     outputs_weighted_avg = input_block_weighed_avg(batch, features=batch)
 
-    input_block_simple_avg = mm.InputBlockV2(
+    input_block_simple_avg = mm.InputBlock(
         schema,
         categorical=mm.Embeddings(
             schema.select_by_tag(Tags.CATEGORICAL),
@@ -198,7 +184,7 @@ def test_tabular_seq_features_avg_embeddings_with_mapvalues(sequence_testing_dat
         sequence_testing_data, batch_size=100, include_targets=False, prepare_features=True
     )
 
-    input_block = mm.InputBlockV2(
+    input_block = mm.InputBlock(
         cat_schema,
         categorical=mm.Embeddings(
             cat_schema,
@@ -228,7 +214,7 @@ def test_embedding_tables_from_schema_infer_dims(sequence_testing_data: Dataset,
         dim={"item_id_seq": 15, "test_user_id": 21},
         embeddings_initializer="truncated_normal",
     )
-    input_block = mm.InputBlockV2(cat_schema, categorical=embeddings_block, aggregation=aggregation)
+    input_block = mm.InputBlock(cat_schema, categorical=embeddings_block, aggregation=aggregation)
 
     loader = mm.Loader(sequence_testing_data, batch_size=100)
     batch = mm.sample_batch(loader, include_targets=False, prepare_features=True)

@@ -179,7 +179,7 @@ class TestAddRandomNegativesToBatch:
         sampling = InBatchNegatives(schema, 5, seed=tf_random_seed)
 
         model = mm.Model(
-            mm.InputBlock(schema),
+            mm.InputBlock(schema, aggregation=None),
             sampling,
             mm.MLPBlock([64]),
             mm.BinaryClassificationTask("click"),

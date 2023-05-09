@@ -466,7 +466,7 @@ class ParallelBlock(TabularBlock):
         user features in a two-tower model or DLRM, and we want to select only the item
         or user features.
 
-        >>> all_inputs = InputBlockV2(schema)  # InputBlock is also a ParallelBlock
+        >>> all_inputs = InputBlock(schema)  # InputBlock is also a ParallelBlock
         >>> item_inputs = all_inputs.select_by_tag(Tags.ITEM)
         ['continuous', 'embeddings']
         >>> item_inputs.schema["continuous"].column_names

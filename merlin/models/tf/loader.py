@@ -385,7 +385,7 @@ def sample_batch(
         Whether to prepare features from dataloader for the model, by default False.
         If enabled, it converts multi-hot/list features to dense or ragged based on the schema.
         It also ensures that scalar features are converted to 2D (batch size, 1).
-        P.s. The features are automatically prepared by InputBlockV2 if it is used
+        P.s. The features are automatically prepared by InputBlock if it is used
     Returns:
     -------
     batch: Dict[tf.tensor]

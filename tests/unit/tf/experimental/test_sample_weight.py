@@ -27,11 +27,11 @@ def test_two_tower_v2_with_contrastive_sample_weight(
     data.schema = data.schema.select_by_name(input_features)
 
     user_schema = data.schema.select_by_tag(Tags.USER)
-    user_inputs = mm.InputBlockV2(user_schema)
+    user_inputs = mm.InputBlock(user_schema)
     query = mm.Encoder(user_inputs, mm.MLPBlock([128, tower_dim]))
 
     item_schema = data.schema.select_by_tag(Tags.ITEM)
-    item_inputs = mm.InputBlockV2(item_schema)
+    item_inputs = mm.InputBlock(item_schema)
     candidate = mm.Encoder(item_inputs, mm.MLPBlock([128, tower_dim]))
 
     output = mm.ContrastiveOutput(
@@ -86,11 +86,11 @@ def test_contrastive_sample_weight_serialization(ecommerce_data: Dataset, run_ea
     data.schema = data.schema.select_by_name(input_features)
 
     user_schema = data.schema.select_by_tag(Tags.USER)
-    user_inputs = mm.InputBlockV2(user_schema)
+    user_inputs = mm.InputBlock(user_schema)
     query = mm.Encoder(user_inputs, mm.MLPBlock([128, tower_dim]))
 
     item_schema = data.schema.select_by_tag(Tags.ITEM)
-    item_inputs = mm.InputBlockV2(item_schema)
+    item_inputs = mm.InputBlock(item_schema)
     candidate = mm.Encoder(item_inputs, mm.MLPBlock([128, tower_dim]))
 
     item_id_cardinality = item_schema["item_id"].int_domain.max + 1

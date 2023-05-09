@@ -56,13 +56,13 @@ def test_popularity_logits_correct():
     )
     corrected_logits = log_q_correction.call_outputs(outputs=inputs)
 
-    inputs_v2 = Prediction(
+    inputs = Prediction(
         outputs=logits,
         targets=[],
         negative_candidate_ids=negative_item_ids,
     )
-    corrected_logits_v2 = log_q_correction(
-        outputs=inputs_v2, features={"item_feature": positive_item_ids}, training=True
+    corrected_logits = log_q_correction(
+        outputs=inputs, features={"item_feature": positive_item_ids}, training=True
     )
 
     tf.debugging.assert_less(logits, corrected_logits.predictions)

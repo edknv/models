@@ -22,7 +22,7 @@ from merlin.models.tf.utils import testing_utils
 
 
 def test_sequential_block_yoochoose(testing_data: Dataset):
-    body = ml.InputBlockV2(testing_data.schema).connect(ml.MLPBlock([64]))
+    body = ml.InputBlock(testing_data.schema).connect(ml.MLPBlock([64]))
 
     batch = ml.sample_batch(testing_data, batch_size=100, include_targets=False)
     outputs = body(batch)

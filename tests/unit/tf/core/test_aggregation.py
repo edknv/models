@@ -18,28 +18,33 @@ import numpy as np
 import pytest
 import tensorflow as tf
 
-import merlin.models.tf as ml
+import merlin.models.tf as mm
 from merlin.io import Dataset
 from merlin.models.tf.core.aggregation import ElementWiseMultiply
 from merlin.schema import Tags
 
 
 def test_concat_aggregation_yoochoose(testing_data: Dataset):
-    tab_module = ml.InputBlock(testing_data.schema)
+    embedding_dim = 64
+    tab_module = mm.InputBlock(
+        testing_data.schema,
+        categorical=mm.Embeddings(testing_data.schema.select_by_tag(Tags.CATEGORICAL), dim=64),
+        aggregation=None,
+    )
 
-    block = tab_module >> ml.ConcatFeatures()
+    block = tab_module >> mm.ConcatFeatures()
 
-    out = block(ml.sample_batch(testing_data, batch_size=100, include_targets=False))
+    out = block(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
 
     assert out.shape[-1] == 262
 
 
 def test_stack_aggregation_yoochoose(testing_data: Dataset):
-    tab_module = ml.EmbeddingFeatures.from_schema(testing_data.schema)
+    tab_module = mm.EmbeddingFeatures.from_schema(testing_data.schema)
 
-    block = tab_module >> ml.StackFeatures()
+    block = tab_module >> mm.StackFeatures()
 
-    out = block(ml.sample_batch(testing_data, batch_size=100, include_targets=False))
+    out = block(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
 
     assert out.shape[1] == 64
     assert out.shape[2] == 4
@@ -47,7 +52,7 @@ def test_stack_aggregation_yoochoose(testing_data: Dataset):
 
 def test_element_wise_sum_features_different_shapes():
     with pytest.raises(ValueError) as excinfo:
-        element_wise_op = ml.ElementwiseSum()
+        element_wise_op = mm.ElementwiseSum()
         input = {
             "item_id/list": tf.random.uniform((10, 20)),
             "category/list": tf.random.uniform((10, 25)),
@@ -57,18 +62,18 @@ def test_element_wise_sum_features_different_shapes():
 
 
 def test_element_wise_sum_aggregation_yoochoose(testing_data: Dataset):
-    tab_module = ml.EmbeddingFeatures.from_schema(testing_data.schema)
+    tab_module = mm.EmbeddingFeatures.from_schema(testing_data.schema)
 
-    block = tab_module >> ml.ElementwiseSum()
+    block = tab_module >> mm.ElementwiseSum()
 
-    out = block(ml.sample_batch(testing_data, batch_size=100, include_targets=False))
+    out = block(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
 
     assert out.shape[-1] == 64
 
 
 def test_element_wise_sum_item_multi_no_col_group():
     with pytest.raises(ValueError) as excinfo:
-        element_wise_op = ml.ElementwiseSumItemMulti()
+        element_wise_op = mm.ElementwiseSumItemMulti()
         element_wise_op(None)
     assert "ElementwiseSumItemMulti requires a schema." in str(excinfo.value)
 
@@ -78,7 +83,7 @@ def test_element_wise_sum_item_multi_col_group_no_item_id(testing_data: Dataset)
         categ_schema = testing_data.schema.select_by_tag(Tags.CATEGORICAL)
         # Remove the item id from col_group
         categ_schema = categ_schema.without("item_id")
-        element_wise_op = ml.ElementwiseSumItemMulti(categ_schema)
+        element_wise_op = mm.ElementwiseSumItemMulti(categ_schema)
         element_wise_op(None)
     assert "no column" in str(excinfo.value)
 
@@ -86,7 +91,7 @@ def test_element_wise_sum_item_multi_col_group_no_item_id(testing_data: Dataset)
 def test_element_wise_sum_item_multi_features_different_shapes(testing_data: Dataset):
     with pytest.raises(ValueError) as excinfo:
         categ_schema = testing_data.schema.select_by_tag(Tags.CATEGORICAL)
-        element_wise_op = ml.ElementwiseSumItemMulti(categ_schema)
+        element_wise_op = mm.ElementwiseSumItemMulti(categ_schema)
         input = {
             "item_id": tf.random.uniform((10, 20)),
             "category": tf.random.uniform((10, 25)),
@@ -96,11 +101,11 @@ def test_element_wise_sum_item_multi_features_different_shapes(testing_data: Dat
 
 
 def test_element_wise_sum_item_multi_aggregation_yoochoose(testing_data: Dataset):
-    tab_module = ml.EmbeddingFeatures.from_schema(testing_data.schema)
+    tab_module = mm.EmbeddingFeatures.from_schema(testing_data.schema)
 
-    block = tab_module >> ml.ElementwiseSumItemMulti(testing_data.schema)
+    block = tab_module >> mm.ElementwiseSumItemMulti(testing_data.schema)
 
-    out = block(ml.sample_batch(testing_data, batch_size=100, include_targets=False))
+    out = block(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
 
     assert out.shape[-1] == 64
 

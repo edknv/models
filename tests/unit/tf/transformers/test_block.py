@@ -44,7 +44,7 @@ def test_retrieval_transformer(sequence_testing_data: Dataset, run_eagerly):
 
     d_model = 48
     query_encoder = mm.Encoder(
-        mm.InputBlockV2(
+        mm.InputBlock(
             query_schema,
             categorical=mm.Embeddings(
                 query_schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
@@ -164,7 +164,7 @@ def test_transformer_as_classification_model(sequence_testing_data: Dataset, run
     loader, schema = classification_loader(sequence_testing_data)
 
     model = mm.Model(
-        mm.InputBlockV2(
+        mm.InputBlock(
             schema,
             categorical=mm.Embeddings(schema, sequence_combiner=None),
         ),
@@ -242,7 +242,7 @@ def test_transformer_with_predict_random(sequence_testing_data: Dataset, run_eag
     transformer_input_dim = 48
     transformer_block = GPT2Block(d_model=transformer_input_dim, n_head=8, n_layer=2)
     model = mm.Model(
-        mm.InputBlockV2(
+        mm.InputBlock(
             model_schema,
             categorical=mm.Embeddings(
                 model_schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
@@ -285,7 +285,7 @@ def test_transformer_with_causal_language_modeling(sequence_testing_data: Datase
     transformer_input_dim = 48
     transformer_block = GPT2Block(d_model=transformer_input_dim, n_head=8, n_layer=2)
     model = mm.Model(
-        mm.InputBlockV2(
+        mm.InputBlock(
             model_schema,
             categorical=mm.Embeddings(
                 model_schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
@@ -338,7 +338,7 @@ def test_transformer_with_masked_language_modeling(sequence_testing_data: Datase
     transformer_input_dim = 48
     transformer_block = XLNetBlock(d_model=transformer_input_dim, n_head=8, n_layer=2)
     model = mm.Model(
-        mm.InputBlockV2(
+        mm.InputBlock(
             seq_schema,
             categorical=mm.Embeddings(
                 seq_schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
@@ -394,11 +394,12 @@ def test_transformer_with_masked_language_modeling_check_eval_masked(
     transformer_input_dim = 48
     transformer_block = BertBlock(d_model=transformer_input_dim, n_head=8, n_layer=2)
     model = mm.Model(
-        mm.InputBlockV2(
+        mm.InputBlock(
             seq_schema,
             categorical=mm.Embeddings(
                 seq_schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner=None
             ),
+            aggregation=None,
         ),
         mm.MLPBlock([transformer_input_dim]),
         transformer_block,
@@ -470,9 +471,9 @@ def test_transformer_model_with_masking_and_broadcast_to_sequence(
     target = schema.select_by_tag(Tags.ITEM_ID).column_names[0]
     item_id_name = schema.select_by_tag(Tags.ITEM_ID).first.properties["domain"]["name"]
 
-    input_block = mm.InputBlockV2(
+    input_block = mm.InputBlock(
         sequence_testing_data.schema,
-        embeddings=mm.Embeddings(
+        categorical=mm.Embeddings(
             seq_schema.select_by_tag(Tags.CATEGORICAL)
             + context_schema.select_by_tag(Tags.CATEGORICAL),
             sequence_combiner=None,

@@ -78,7 +78,7 @@ def test_binary_output_two_tasks(ecommerce_data: Dataset, run_eagerly, use_outpu
 def test_categorical_output(sequence_testing_data: Dataset, run_eagerly):
     dataloader, schema = testing_utils.loader_for_last_item_prediction(sequence_testing_data)
     model = mm.Model(
-        mm.InputBlockV2(schema),
+        mm.InputBlock(schema),
         mm.MLPBlock([8]),
         mm.CategoricalOutput(schema["item_id_seq"]),
     )
@@ -115,7 +115,7 @@ def test_last_item_prediction(sequence_testing_data: Dataset, run_eagerly):
 
     for target in predictions:
         model = mm.Model(
-            mm.InputBlockV2(schema, categorical=embeddings),
+            mm.InputBlock(schema, categorical=embeddings),
             mm.MLPBlock([32]),
             mm.CategoricalOutput(target),
         )

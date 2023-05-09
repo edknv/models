@@ -10,7 +10,7 @@ from merlin.models.tf.blocks.mlp import MLPBlock, RegularizerType
 from merlin.models.tf.core.aggregation import ConcatFeatures
 from merlin.models.tf.core.base import Block, BlockType
 from merlin.models.tf.core.combinators import ParallelBlock, TabularBlock
-from merlin.models.tf.inputs.base import InputBlockV2
+from merlin.models.tf.inputs.base import InputBlock
 from merlin.models.tf.inputs.embedding import EmbeddingOptions, Embeddings
 from merlin.models.tf.models.base import Model
 from merlin.models.tf.models.utils import parse_prediction_blocks
@@ -134,11 +134,11 @@ def DCNModel(
     stacked : bool
         Whether to use the stacked version of the model or the parallel version.
     input_block : Block, optional
-        The `Block` to use as the input layer. If None, a default `InputBlockV2` object
+        The `Block` to use as the input layer. If None, a default `InputBlock` object
         is instantiated, that creates the embedding tables for the categorical features
         based on the schema. The embedding dimensions are inferred from the features
         cardinality. For a custom representation of input data you can instantiate
-        and provide an `InputBlockV2` instance.
+        and provide an `InputBlock` instance.
     prediction_tasks: Optional[Union[PredictionTask,List[PredictionTask],
                                 ParallelPredictionBlock,ModelOutputType]
         The prediction tasks to be used, by default this will be inferred from the Schema.
@@ -156,7 +156,7 @@ def DCNModel(
         Number of cross layers (depth) should be positive
     """
 
-    input_block = input_block or InputBlockV2(schema, **kwargs)
+    input_block = input_block or InputBlock(schema, **kwargs)
     prediction_blocks = parse_prediction_blocks(schema, prediction_tasks)
     if stacked:
         dcn_body = input_block.connect(CrossBlock(depth), deep_block)
@@ -215,11 +215,11 @@ def DeepFMModel(
         Defaults to MLPBlock([64])
     input_block : Block, optional
         The `Block` to use as the input layer for the FM and Deep components.
-        If None, a default `InputBlockV2` object
+        If None, a default `InputBlock` object
         is instantiated, that creates the embedding tables for the categorical features
         based on the schema, with the specified embedding_dim.
         For a custom representation of input data you can instantiate
-        and provide an `InputBlockV2` instance.
+        and provide an `InputBlock` instance.
     wide_input_block: Optional[Block], by default None
         The input for the wide block. If not provided,
         creates a default block that encodes categorical features
@@ -244,7 +244,7 @@ def DeepFMModel(
 
     """
 
-    input_block = input_block or InputBlockV2(
+    input_block = input_block or InputBlock(
         schema,
         aggregation=None,
         categorical=Embeddings(schema.select_by_tag(Tags.CATEGORICAL), dim=embedding_dim),
@@ -320,7 +320,7 @@ def WideAndDeepModel(
         deep_embedding = ml.Embeddings(schema, embedding_dim_default=8, infer_embedding_sizes=False)
         model = ml.WideAndDeepModel(
             schema,
-            deep_input_block = ml.InputBlockV2(schema=schema, categorical=deep_embedding),
+            deep_input_block = ml.InputBlock(schema=schema, categorical=deep_embedding),
             wide_schema=wide_schema,
             wide_preprocess=ml.CategoryEncoding(wide_schema, output_mode="multi_hot", sparse=True),
             deep_block=ml.MLPBlock([32, 16]),
@@ -510,7 +510,7 @@ def WideAndDeepModel(
 
     if not deep_input_block:
         if deep_schema is not None and len(deep_schema) > 0:
-            deep_input_block = InputBlockV2(
+            deep_input_block = InputBlock(
                 deep_schema,
                 categorical=Embeddings(
                     deep_schema.select_by_tag(Tags.CATEGORICAL),

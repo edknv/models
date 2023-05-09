@@ -326,7 +326,7 @@ class TestEmbeddingTable:
 
 
 @pytest.mark.parametrize("trainable", [True, False])
-def test_pretrained_from_InputBlockV2(trainable, music_streaming_data: Dataset):
+def test_pretrained_from_InputBlock(trainable, music_streaming_data: Dataset):
     vocab_size = music_streaming_data.schema.column_schemas["item_id"].int_domain.max + 1
     embedding_dim = 32
     weights = np.random.rand(vocab_size, embedding_dim)
@@ -344,7 +344,7 @@ def test_pretrained_from_InputBlockV2(trainable, music_streaming_data: Dataset):
         trainable={"item_id": trainable},
         dim=embed_dims,
     )
-    input_block = mm.InputBlockV2(music_streaming_data.schema, categorical=embeddings_block)
+    input_block = mm.InputBlock(music_streaming_data.schema, categorical=embeddings_block)
 
     model = mm.DCNModel(
         music_streaming_data.schema,
@@ -740,7 +740,8 @@ def test_shared_embeddings(music_streaming_data: Dataset):
 
     embeddings = inputs.select_by_name(Tags.CATEGORICAL.value)
 
-    assert embeddings.table_config("item_genres") == embeddings.table_config("user_genres")
+    assert "item_genres" in embeddings.parallel_layers["genres"].features
+    assert "user_genres" in embeddings.parallel_layers["genres"].features
 
 
 class TestEmbeddings:

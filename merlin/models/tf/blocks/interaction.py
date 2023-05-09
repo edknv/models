@@ -23,7 +23,7 @@ from merlin.models.tf.core.aggregation import StackFeatures
 from merlin.models.tf.core.base import Block
 from merlin.models.tf.core.combinators import MapValues, ParallelBlock, SequentialBlock
 from merlin.models.tf.core.tabular import Filter
-from merlin.models.tf.inputs.base import InputBlockV2
+from merlin.models.tf.inputs.base import InputBlock
 from merlin.models.tf.inputs.embedding import Embeddings
 from merlin.models.tf.transforms.features import CategoryEncoding, ToSparse
 from merlin.schema import Schema, Tags
@@ -267,7 +267,7 @@ def FMBlock(
         The input block for the 2nd-order feature interaction in Factorization Machine.
         Only categorical features will be used by this block, as it computes
         dot product between all paired combinations of embedding values.
-        If not provided, an InputBlockV2 is instantiated based on schema.
+        If not provided, an InputBlock is instantiated based on schema.
         Note: All features (including continuous) are considered in the
         1st-order (wide) part which uses another input block.
     wide_input_block: Optional[Block], by default None
@@ -280,7 +280,7 @@ def FMBlock(
         dropout or kernel regularization to the wide block.
     factors_dim : Optional[int], optional
         If fm_input_block is not provided, the factors_dim is used to define the
-        embeddings dim to instantiate InputBlockV2, by default None
+        embeddings dim to instantiate InputBlock, by default None
     Returns
     -------
     tf.Tensor
@@ -302,7 +302,7 @@ def FMBlock(
     wide_logit_block = wide_logit_block or MLPBlock([1], activation="linear", use_bias=True)
     first_order = wide_input_block.connect(wide_logit_block)
 
-    fm_input_block = fm_input_block or InputBlockV2(
+    fm_input_block = fm_input_block or InputBlock(
         cat_schema,
         categorical=Embeddings(cat_schema, dim=factors_dim),
         aggregation=None,

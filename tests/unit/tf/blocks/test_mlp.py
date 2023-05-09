@@ -84,7 +84,7 @@ def test_mlp_model_with_sequential_features_and_combiner(
     loader = Loader(sequence_testing_data, batch_size=8, shuffle=False)
 
     model = ml.Model(
-        ml.InputBlockV2(
+        ml.InputBlock(
             schema,
             categorical=ml.Embeddings(
                 schema.select_by_tag(Tags.CATEGORICAL), sequence_combiner="mean"
@@ -176,7 +176,7 @@ def test_dense_residual_block(
     kernel_regularizer=regularizers.l2(1e-5),
     bias_regularizer=regularizers.l2(1e-5),
 ):
-    inputs = ml.InputBlockV2(testing_data.schema)
+    inputs = ml.InputBlock(testing_data.schema)
 
     residual_block = ml.DenseResidualBlock(
         low_rank_dim=low_rank_dim,

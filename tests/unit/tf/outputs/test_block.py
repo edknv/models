@@ -37,7 +37,7 @@ def test_model_output(ecommerce_data: Dataset, run_eagerly: bool, use_output_blo
         )
 
     model = mm.Model(
-        mm.InputBlockV2(ecommerce_data.schema),
+        mm.InputBlock(ecommerce_data.schema),
         mm.MLPBlock([4]),
         output_block,
     )
@@ -83,7 +83,7 @@ def test_model_output_custom_task_output(
             output_block.parallel_dict["click/regression_output"], mm.RegressionOutput
         )
 
-    model = mm.Model(mm.InputBlockV2(ecommerce_data.schema), mm.MLPBlock([4]), output_block)
+    model = mm.Model(mm.InputBlock(ecommerce_data.schema), mm.MLPBlock([4]), output_block)
 
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
 
@@ -129,7 +129,7 @@ def test_model_output_custom_task_output(
 def test_model_with_multi_output_blocks_with_task_towers(
     music_streaming_data: Dataset, task_blocks, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema, task_blocks=task_blocks)
     model = mm.Model(inputs, mm.MLPBlock([64]), output_block)
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
@@ -201,7 +201,7 @@ def test_model_with_multi_output_blocks_with_task_towers(
 def test_model_with_multi_output_blocks_metrics_tasks(music_streaming_data: Dataset, metrics):
     music_streaming_data.schema = music_streaming_data.schema.without("play_percentage")
 
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema)
     model = mm.Model(inputs, mm.MLPBlock([64]), output_block)
 
@@ -308,7 +308,7 @@ def test_model_with_multi_output_blocks_metrics_tasks(music_streaming_data: Data
 def test_model_with_multi_output_blocks_loss_weights_and_weighted_metrics(
     music_streaming_data: Dataset, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema)
     model = mm.Model(inputs, mm.MLPBlock([64]), output_block)
 
@@ -419,7 +419,7 @@ def test_model_with_multi_output_blocks_loss_weights_and_weighted_metrics(
 def test_column_based_sample_weight(
     music_streaming_data: Dataset, sample_weight_column: str, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.BinaryOutput(
         "like",
         post=mm.ColumnBasedSampleWeight(
@@ -458,7 +458,7 @@ def test_column_based_sample_weight(
 def test_column_based_sample_weight_check_loss_weighted_metrics(
     music_streaming_data: Dataset, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.BinaryOutput(
         "like",
         post=mm.ColumnBasedSampleWeight(weight_column_name="click"),
@@ -524,7 +524,7 @@ def test_column_based_sample_weight_check_loss_weighted_metrics(
 def test_column_based_sample_weight_with_multitask(
     music_streaming_data: Dataset, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(
         music_streaming_data.schema,
         model_outputs={
@@ -627,7 +627,7 @@ def test_mmoe_model(
     task_blocks: Optional[Block],
     enable_gate_weights_metrics: bool,
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema, task_blocks=task_blocks)
     num_experts = 4
     mmoe = mm.MMOEBlock(
@@ -705,7 +705,7 @@ class CustomSampleWeight(Block):
 def test_mmoe_block_task_specific_sample_weight_and_weighted_metrics(
     music_streaming_data: Dataset, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(
         music_streaming_data.schema,
         model_outputs={"like/binary_output": mm.BinaryOutput("like", post=CustomSampleWeight())},
@@ -776,7 +776,7 @@ def test_mmoe_block_task_specific_sample_weight_and_weighted_metrics(
 
 @testing_utils.mark_run_eagerly_modes
 def test_mmoe_model_serialization(music_streaming_data: Dataset, run_eagerly: bool):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(
         music_streaming_data.schema,
     )
@@ -828,7 +828,7 @@ def test_mmoe_model_serialization(music_streaming_data: Dataset, run_eagerly: bo
 )
 def test_cgc_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks: Optional[Block]):
     schema = music_streaming_data.schema
-    inputs = mm.InputBlockV2(schema)
+    inputs = mm.InputBlock(schema)
     output_block = mm.OutputBlock(music_streaming_data.schema, task_blocks=task_blocks)
     cgc = mm.CGCBlock(
         output_block,
@@ -874,7 +874,7 @@ def test_cgc_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks
     [None, mm.MLPBlock([32])],
 )
 def test_ple_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks: Optional[Block]):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema, task_blocks=task_blocks)
     ple = mm.PLEBlock(
         num_layers=2,
@@ -915,7 +915,7 @@ def test_ple_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks
 
 @testing_utils.mark_run_eagerly_modes
 def test_ple_model_serialization(music_streaming_data: Dataset, run_eagerly: bool):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     output_block = mm.OutputBlock(music_streaming_data.schema, task_blocks=mm.MLPBlock([32]))
     ple = mm.PLEBlock(
         num_layers=2,

@@ -26,7 +26,7 @@ from merlin.models.io import save_merlin_metadata
 from merlin.models.tf.core import combinators
 from merlin.models.tf.core.base import NoOp
 from merlin.models.tf.core.prediction import TopKPrediction
-from merlin.models.tf.inputs.base import InputBlockV2
+from merlin.models.tf.inputs.base import InputBlock
 from merlin.models.tf.inputs.embedding import CombinerType, EmbeddingTable
 from merlin.models.tf.models.base import BaseModel, get_output_schema
 from merlin.models.tf.outputs.topk import TopKOutput
@@ -66,7 +66,7 @@ class Encoder(tf.keras.Model):
     ):
         super().__init__(**kwargs)
         if isinstance(inputs, Schema):
-            input_block = InputBlockV2(inputs)
+            input_block = InputBlock(inputs)
             self._schema = inputs
         else:
             input_block = inputs

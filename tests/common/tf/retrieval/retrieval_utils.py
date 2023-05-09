@@ -331,7 +331,7 @@ def get_dual_encoder_model_v2(
 
         # define query tower
         user_schema = schema.select_by_tag(Tags.USER)
-        query_inputs = mm.InputBlockV2(
+        query_inputs = mm.InputBlock(
             user_schema,
             categorical=mm.Embeddings(
                 user_schema.select_by_tag(Tags.CATEGORICAL),
@@ -362,7 +362,7 @@ def get_dual_encoder_model_v2(
 
         # define candidate tower
         candidate_schema = schema.select_by_tag(Tags.ITEM)
-        candidate_inputs = mm.InputBlockV2(
+        candidate_inputs = mm.InputBlock(
             candidate_schema,
             categorical=mm.Embeddings(
                 candidate_schema.select_by_tag(Tags.CATEGORICAL),

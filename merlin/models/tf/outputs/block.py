@@ -170,7 +170,7 @@ class ColumnBasedSampleWeight(Block):
       column as the weight column and setting binary_class_weights.
 
       ```
-      inputs = mm.InputBlockV2(music_streaming_data.schema)
+      inputs = mm.InputBlock(music_streaming_data.schema)
       output_block = mm.BinaryOutput("like",
             post=mm.ColumnBasedSampleWeight(
                 weight_column_name="like", binary_class_weights=((1.0, 5.0)
@@ -186,7 +186,7 @@ class ColumnBasedSampleWeight(Block):
       "like" prediction task.
 
       ```
-      inputs = mm.InputBlockV2(music_streaming_data.schema)
+      inputs = mm.InputBlock(music_streaming_data.schema)
       output_block = mm.ParallelBlock(
             "view/binary_output": mm.BinaryOutput("view"),
             "like/binary_output": mm.BinaryOutput("like",

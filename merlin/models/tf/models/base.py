@@ -1996,7 +1996,7 @@ class Model(BaseModel):
 
         Example :
             ```python
-            input_block = ml.InputBlockV2(schema)
+            input_block = ml.InputBlock(schema)
             layer_1 = ml.MLPBlock([64], name="layer_1")
             layer_2 = ml.MLPBlock([1], no_activation_last_layer=True, name="layer_2")
             two_layer = ml.SequentialBlock([layer_1, layer_2], name="two_layers")

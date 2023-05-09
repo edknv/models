@@ -166,8 +166,8 @@ def test_two_tower_with_embeddings():
     item_embeddings = ml.Embeddings(schema.select_by_tag(Tags.ITEM), infer_embedding_sizes=True)
     query_embeddings = ml.Embeddings(schema.select_by_tag(Tags.USER), infer_embedding_sizes=True)
 
-    item_input_block = ml.InputBlockV2(schema.select_by_tag(Tags.ITEM), categorical=item_embeddings)
-    query_input_block = ml.InputBlockV2(
+    item_input_block = ml.InputBlock(schema.select_by_tag(Tags.ITEM), categorical=item_embeddings)
+    query_input_block = ml.InputBlock(
         schema.select_by_tag(Tags.USER), categorical=query_embeddings
     )
 

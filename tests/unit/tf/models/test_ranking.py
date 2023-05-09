@@ -240,7 +240,7 @@ def test_dlrm_model_multi_task_v2(music_streaming_data, run_eagerly):
 )
 def test_serialization_model(ecommerce_data: Dataset, prediction_task):
     model = mm.Model(
-        mm.InputBlockV2(ecommerce_data.schema), mm.MLPBlock([2]), prediction_task("click")
+        mm.InputBlock(ecommerce_data.schema), mm.MLPBlock([2]), prediction_task("click")
     )
 
     testing_utils.model_test(model, ecommerce_data, reload_model=True)
@@ -309,7 +309,7 @@ def test_wide_deep_embedding_custom_inputblock(music_streaming_data, run_eagerly
 
     model = mm.WideAndDeepModel(
         schema,
-        deep_input_block=mm.InputBlockV2(schema=schema, categorical=deep_embedding),
+        deep_input_block=mm.InputBlock(schema=schema, categorical=deep_embedding),
         wide_schema=wide_schema,
         wide_preprocess=mm.HashedCross(wide_schema, 1000, sparse=True),
         deep_block=mm.MLPBlock([32, 16]),

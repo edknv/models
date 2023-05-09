@@ -22,7 +22,7 @@ def test_concat_sequence(sequence_testing_data):
     sequence_testing_data.schema = sequence_testing_data.schema.select_by_tag(Tags.SEQUENCE)
     seq_schema = sequence_testing_data.schema
 
-    seq_inputs = mm.InputBlockV2(
+    seq_inputs = mm.InputBlock(
         seq_schema,
         aggregation="concat",
         categorical=mm.Embeddings(

@@ -20,6 +20,7 @@ import tensorflow as tf
 import merlin.models.tf as mm
 from merlin.io import Dataset
 from merlin.models.tf.utils import testing_utils
+from merlin.schema import Tags
 
 
 @pytest.mark.parametrize("cross_layers", [1, 2, 3])
@@ -68,7 +69,7 @@ def test_cross_0_layers():
 def test_cross_with_inputs_to_be_concat(testing_data: Dataset):
     inputs = mm.InputBlock(
         testing_data.schema,
-        embedding_options=mm.EmbeddingOptions(embedding_dim_default=128),
+        categorical=mm.Embeddings(testing_data.schema.select_by_tag(Tags.CATEGORICAL), dim=128),
     )
     cross = mm.CrossBlock(depth=1, inputs=inputs)
     output = cross(mm.sample_batch(testing_data, batch_size=100, include_targets=False))
@@ -80,7 +81,7 @@ def test_dcn_v2_stacked(testing_data: Dataset):
     dcn_body = (
         mm.InputBlock(
             testing_data.schema,
-            embedding_options=mm.EmbeddingOptions(embedding_dim_default=128),
+            categorical=mm.Embeddings(testing_data.schema.select_by_tag(Tags.CATEGORICAL), dim=128),
             aggregation="concat",
         )
         .connect(mm.CrossBlock(3))
@@ -96,7 +97,7 @@ def test_dcn_v2_stacked_low_rank(testing_data: Dataset):
     dcn_body = (
         mm.InputBlock(
             testing_data.schema,
-            embedding_options=mm.EmbeddingOptions(embedding_dim_default=128),
+            categorical=mm.Embeddings(testing_data.schema.select_by_tag(Tags.CATEGORICAL), dim=128),
             aggregation="concat",
         )
         .connect(mm.CrossBlock(3, low_rank_dim=64))
@@ -111,7 +112,7 @@ def test_dcn_v2_stacked_low_rank(testing_data: Dataset):
 def test_dcn_v2_parallel(testing_data: Dataset):
     input_layer = mm.InputBlock(
         testing_data.schema,
-        embedding_options=mm.EmbeddingOptions(embedding_dim_default=128),
+        categorical=mm.Embeddings(testing_data.schema.select_by_tag(Tags.CATEGORICAL), dim=128),
         aggregation="concat",
     )
 
@@ -131,7 +132,7 @@ def test_dcn_v2(ecommerce_data: Dataset, run_eagerly=True):
     dcn_body = (
         mm.InputBlock(
             ecommerce_data.schema,
-            embedding_options=mm.EmbeddingOptions(embedding_dim_default=128),
+            categorical=mm.Embeddings(ecommerce_data.schema.select_by_tag(Tags.CATEGORICAL), dim=128),
             aggregation="concat",
         )
         .connect(mm.CrossBlock(3, low_rank_dim=64))

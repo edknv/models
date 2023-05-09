@@ -9,7 +9,7 @@ from merlin.models.tf.blocks.sampling.base import ItemSampler
 from merlin.models.tf.core.base import Block, BlockType
 from merlin.models.tf.core.combinators import ParallelBlock
 from merlin.models.tf.core.encoder import EmbeddingEncoder, Encoder
-from merlin.models.tf.inputs.base import InputBlock
+from merlin.models.tf.inputs.base import InputBlockLegacy
 from merlin.models.tf.inputs.embedding import EmbeddingOptions
 from merlin.models.tf.models.base import Model, RetrievalModel, RetrievalModelV2
 from merlin.models.tf.models.utils import parse_prediction_tasks
@@ -288,7 +288,7 @@ def YoutubeDNNRetrievalModel(
         options for the embedding table, by default EmbeddingOptions()
     """
 
-    inputs = InputBlock(
+    inputs = InputBlockLegacy(
         schema,
         aggregation=aggregation,
         embedding_options=embedding_options,

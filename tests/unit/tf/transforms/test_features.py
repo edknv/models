@@ -858,7 +858,7 @@ def test_broadcast_to_sequence_input_block(sequence_testing_data: Dataset):
     context_schema = schema.select_by_name(["user_age", "user_country"])
     sequence_testing_data.schema = seq_schema + context_schema
 
-    input_block = mm.InputBlockV2(
+    input_block = mm.InputBlock(
         sequence_testing_data.schema,
         embeddings=mm.Embeddings(
             seq_schema.select_by_tag(Tags.CATEGORICAL)

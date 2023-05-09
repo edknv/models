@@ -35,7 +35,7 @@ def _CustomBinaryPrediction(name, **kwargs):
 @pytest.mark.parametrize("run_eagerly", [True, False])
 def test_prediction_block(ecommerce_data: Dataset, run_eagerly):
     model = mm.Model(
-        mm.InputBlockV2(ecommerce_data.schema),
+        mm.InputBlock(ecommerce_data.schema),
         mm.MLPBlock([8]),
         _CustomBinaryPrediction("click"),
     )
@@ -57,7 +57,7 @@ def test_logits_scaler(ecommerce_data: Dataset):
     set_random_seed(42)
     logits_temperature = 2.0
     model = mm.Model(
-        mm.InputBlockV2(ecommerce_data.schema),
+        mm.InputBlock(ecommerce_data.schema),
         mm.MLPBlock([8]),
         mm.BinaryOutput(
             "click",

@@ -339,6 +339,6 @@ def test_block_with_categorical_target():
     batch = mm.sample_batch(data, batch_size=2)
     assert batch[1].shape == (2, 1)
 
-    inputs = mm.InputBlock(data.schema)
+    inputs = mm.InputBlock(data.schema, aggregation=None)
     embeddings = inputs(batch[0])
     assert list(embeddings.keys()) == ["Engaging User", "Author"]

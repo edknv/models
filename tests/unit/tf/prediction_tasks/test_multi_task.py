@@ -26,7 +26,7 @@ from merlin.models.tf.utils import testing_utils
 def test_model_with_multiple_tasks_with_task_towers(
     music_streaming_data: Dataset, task_blocks, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(music_streaming_data.schema, task_blocks=task_blocks)
     model = mm.Model(inputs, mm.MLPBlock([64]), prediction_tasks)
     model.compile(optimizer="adam", run_eagerly=run_eagerly)
@@ -87,7 +87,7 @@ def test_model_with_multiple_tasks_metrics(
 ):
     music_streaming_data.schema = music_streaming_data.schema.without("play_percentage")
 
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(music_streaming_data.schema)
     model = mm.Model(inputs, mm.MLPBlock([64]), prediction_tasks)
 
@@ -183,7 +183,7 @@ def test_model_with_multiple_tasks_metrics(
 def test_model_with_multiple_tasks_loss_weights_and_weighted_metrics(
     music_streaming_data: Dataset, run_eagerly: bool
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(music_streaming_data.schema)
     model = mm.Model(inputs, mm.MLPBlock([64]), prediction_tasks)
 
@@ -287,7 +287,7 @@ def test_mmoe_model(
     task_blocks: Optional[Block],
     enable_gate_weights_metrics: bool,
 ):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(music_streaming_data.schema, task_blocks=task_blocks)
     num_experts = 4
     mmoe = mm.MMOEBlock(
@@ -359,7 +359,7 @@ def test_mmoe_block_task_specific_sample_weight_and_weighted_metrics(
             )
             return outputs
 
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(
         music_streaming_data.schema, task_pre_dict={"like": CustomSampleWeight()}
     )
@@ -434,7 +434,7 @@ def test_mmoe_block_task_specific_sample_weight_and_weighted_metrics(
 
 @testing_utils.mark_run_eagerly_modes
 def test_mmoe_model_serialization(music_streaming_data: Dataset, run_eagerly: bool):
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(
         music_streaming_data.schema, task_blocks=mm.MLPBlock([32])
     )
@@ -464,7 +464,7 @@ def test_mmoe_model_serialization(music_streaming_data: Dataset, run_eagerly: bo
 )
 def test_cgc_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks: Optional[Block]):
     schema = music_streaming_data.schema
-    inputs = mm.InputBlockV2(schema)
+    inputs = mm.InputBlock(schema)
     prediction_tasks = mm.PredictionTasks(schema, task_blocks=task_blocks)
     cgc = mm.CGCBlock(
         prediction_tasks,
@@ -508,7 +508,7 @@ def test_cgc_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks
 )
 def test_ple_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks: Optional[Block]):
     schema = music_streaming_data.schema
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(schema, task_blocks=task_blocks)
     cgc = mm.PLEBlock(
         num_layers=2,
@@ -549,7 +549,7 @@ def test_ple_model(music_streaming_data: Dataset, run_eagerly: bool, task_blocks
 @testing_utils.mark_run_eagerly_modes
 def test_ple_model_serialization(music_streaming_data: Dataset, run_eagerly: bool):
     schema = music_streaming_data.schema
-    inputs = mm.InputBlockV2(music_streaming_data.schema)
+    inputs = mm.InputBlock(music_streaming_data.schema)
     prediction_tasks = mm.PredictionTasks(schema, task_blocks=mm.MLPBlock([32]))
     cgc = mm.PLEBlock(
         num_layers=2,

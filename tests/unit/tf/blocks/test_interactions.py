@@ -53,7 +53,7 @@ def test_fm_block_with_multi_hot_categ_features(testing_data: Dataset):
     cat_schema_onehot = cat_schema.remove_by_tag(Tags.LIST)
     cat_schema_multihot = cat_schema.select_by_tag(Tags.LIST)
 
-    input_block = mm.InputBlockV2(
+    input_block = mm.InputBlock(
         schema,
         categorical=mm.Embeddings(
             cat_schema,

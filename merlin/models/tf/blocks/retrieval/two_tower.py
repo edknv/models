@@ -21,7 +21,7 @@ import tensorflow as tf
 
 from merlin.models.tf.blocks.retrieval.base import DualEncoderBlock, RetrievalMixin
 from merlin.models.tf.core.base import Block, BlockType
-from merlin.models.tf.inputs.base import InputBlock
+from merlin.models.tf.inputs.base import InputBlockLegacy
 from merlin.models.tf.inputs.embedding import EmbeddingOptions
 from merlin.schema import Schema, Tags
 
@@ -103,7 +103,7 @@ class TwoTowerBlock(DualEncoderBlock, RetrievalMixin):
                     f"The schema should contain features with the tag `{item_tower_tag}`,"
                     "required by item-tower"
                 )
-            item_tower_inputs = InputBlock(item_schema, embedding_options=embedding_options)
+            item_tower_inputs = InputBlockLegacy(item_schema, embedding_options=embedding_options)
             _item_tower = item_tower_inputs.connect(_item_tower)
         if not getattr(query_tower, "inputs", None):
             query_schema = schema.select_by_tag(query_tower_tag) if query_tower_tag else schema
@@ -112,7 +112,7 @@ class TwoTowerBlock(DualEncoderBlock, RetrievalMixin):
                     f"The schema should contain features with the tag `{query_schema}`,"
                     "required by query-tower"
                 )
-            query_inputs = InputBlock(query_schema, embedding_options=embedding_options)
+            query_inputs = InputBlockLegacy(query_schema, embedding_options=embedding_options)
             query_tower = query_inputs.connect(query_tower)
 
         super().__init__(query_tower, _item_tower, post=post, **kwargs)

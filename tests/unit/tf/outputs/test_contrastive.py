@@ -136,7 +136,7 @@ def test_setting_negative_sampling_strategy(sequence_testing_data: Dataset):
         sequence_testing_data, to_one_hot=False
     )
     model_out = mm.ContrastiveOutput(schema["item_id_seq"], "in-batch")
-    model = mm.Model(mm.InputBlockV2(schema), mm.MLPBlock([32]), model_out)
+    model = mm.Model(mm.InputBlock(schema), mm.MLPBlock([32]), model_out)
     model.compile(optimizer="adam")
 
     batch = next(iter(dataloader))
