@@ -16,5 +16,6 @@
 
 from merlin.models.torch.batch import Batch, Sequence
 from merlin.models.torch.block import Block, ParallelBlock
+from merlin.models.torch.transforms.agg import Concat, Stack
 
-__all__ = ["Batch", "Block", "ParallelBlock", "Sequence"]
+__all__ = ["Batch", "Block", "ParallelBlock", "Sequence", "Concat", "Stack"]
