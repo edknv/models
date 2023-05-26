@@ -15,7 +15,7 @@
 #
 
 import inspect
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -178,3 +178,13 @@ def _all_close_dict(left, right):
     for key in left.keys():
         if not torch.allclose(left[key], right[key]):
             raise ValueError("The outputs of the original and scripted modules are not the same")
+
+
+def get_all_children(module: nn.Module) -> List[nn.Module]:
+    children = []
+    for child in module.children():
+        if not isinstance(child, nn.ModuleList):
+            children.append(child)
+        children.extend(get_all_children(child))
+
+    return children
