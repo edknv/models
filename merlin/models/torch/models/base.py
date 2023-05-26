@@ -19,7 +19,9 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from merlin.models.torch.batch import Batch
+from merlin.dataloader.torch import Loader
+from merlin.io import Dataset
+from merlin.models.torch.batch import Batch, sample_batch
 from merlin.schema import Schema
 from merlin.models.torch.outputs.base import ModelOutput
 
@@ -43,6 +45,9 @@ class Model(pl.LightningModule):
         self.schema = schema
         self.blocks = nn.ModuleList(blocks)
         self.optimizer = optimizer
+
+    def initialize(self, data: Loader):
+        return initialize(self, data)
 
     def forward(self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None):
         outputs = inputs
@@ -134,3 +139,30 @@ def compute_metrics(
         metrics[name] = tuple(curr_metrics)
 
     return metrics
+
+
+def initialize(module, data: Loader):
+    if isinstance(data, (Loader, Dataset)):
+        module.double()  # TODO: Put in data-loader PR to standardize on float-32
+        batch = sample_batch(data, batch_size=1, shuffle=False)
+    else:
+        batch = data
+
+    #module.to(get_device(batch))
+    return module(batch)
+
+
+def get_device(data):
+    if isinstance(data, torch.Tensor):
+        device = data.device
+    elif isinstance(data, tuple):
+        device = data[0].device
+    elif isinstance(data, dict):
+        for d in data.values():
+            if isinstance(d, torch.Tensor):
+                device = d.device
+                break
+    else:
+        raise ValueError(f"Unsupported data type {type(data)}")
+
+    return device

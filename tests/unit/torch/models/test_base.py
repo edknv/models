@@ -71,13 +71,15 @@ class TestModel:
         # assert model.input_schema()
         # assert model.output_schema()
 
-        trainer = pl.Trainer(max_epochs=1)
-
         loader = Loader(
             music_streaming_data,
             batch_size=16,
             shuffle=False,
         )
+
+        model.initialize(loader)
+
+        trainer = pl.Trainer(max_epochs=1)
 
         trainer.fit(model, loader)
 
