@@ -15,14 +15,12 @@
 #
 
 from merlin.models.torch.batch import Batch, Sequence
-<<<<<<< HEAD
 from merlin.models.torch.block import Block, ParallelBlock
 from merlin.models.torch.models.base import Model
-=======
 from merlin.models.torch.block import Block
->>>>>>> main
 from merlin.models.torch.outputs.base import ModelOutput
 from merlin.models.torch.outputs.classification import BinaryOutput
+from merlin.models.torch.transforms.agg import Concat, Stack
 
 __all__ = [
     "Batch",
@@ -32,4 +30,6 @@ __all__ = [
     "ModelOutput",
     "ParallelBlock",
     "Sequence",
+    "Concat",
+    "Stack",
 ]
