@@ -68,9 +68,6 @@ class TestModel:
             schema=schema,
         )
 
-        # assert model.input_schema()
-        # assert model.output_schema()
-
         loader = Loader(
             music_streaming_data,
             batch_size=16,

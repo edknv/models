@@ -24,6 +24,7 @@ from merlin.io import Dataset
 from merlin.models.torch.batch import Batch, sample_batch
 from merlin.schema import Schema
 from merlin.models.torch.outputs.base import ModelOutput
+from merlin.models.torch.utils import module_utils
 
 
 class Model(pl.LightningModule):
@@ -50,10 +51,7 @@ class Model(pl.LightningModule):
         return initialize(self, data)
 
     def forward(self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None):
-        outputs = inputs
-        for block in self.blocks:
-            outputs = block(outputs, batch=batch)
-        return outputs
+        return module_utils.apply(self.blocks, inputs)
 
     def training_step(self, batch, batch_idx):
         del batch_idx
