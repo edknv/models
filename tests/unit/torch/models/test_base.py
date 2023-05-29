@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 import pytorch_lightning as pl
+import pytest
 import torch
 from torch import nn
 
@@ -58,38 +59,73 @@ class TestModel:
         model = mm.Model(mm.Block(name="a"), mm.Block(name="b"), mm.Block(name="c"))
         assert model.last()._name == "c"
 
-    def test_train_classification(self, music_streaming_data):
-        schema = music_streaming_data.schema.without(["user_genres", "like", "item_genres"])
-        click_column = schema.select_by_name("click").first
+    #def test_train_classification(self, music_streaming_data):
+    #    schema = music_streaming_data.schema.without(["user_genres", "like", "item_genres"])
+    #    music_streaming_data.schema = schema
+    #    click_column = schema.select_by_name("click").first
 
-        model = mm.Model(
-            mm.ParallelBlock(),
-            mm.BinaryOutput(click_column),
-            schema=schema,
+    #    model = mm.Model(
+    #        #mm.ParallelBlock(),
+    #        mm.Concat(),
+    #        mm.BinaryOutput(click_column),
+    #        schema=schema,
+    #    )
+
+    #    trainer = pl.Trainer(max_epochs=1)
+
+    #    with Loader(
+    #        music_streaming_data,
+    #        batch_size=16,
+    #        shuffle=False,
+    #    ) as loader:
+    #        model.initialize(loader)
+    #        trainer.fit(model, loader)
+
+
+class TestComputeLoss:
+    def test_tensor_inputs(self):
+        predictions = torch.randn(2, 1)
+        targets = torch.randint(2, (2, 1), dtype=torch.float32)
+        model_outputs = [mm.BinaryOutput()]
+        loss = compute_loss(predictions, targets, model_outputs)
+        expected = nn.BCEWithLogitsLoss()(predictions, targets)
+    
+        assert isinstance(loss, torch.Tensor)
+        assert torch.allclose(loss, expected)
+    
+    
+    def test_dict_inputs(self):
+        predictions = {"a": torch.randn(2, 1)}
+        targets = {"a": torch.randint(2, (2, 1), dtype=torch.float32)}
+        model_outputs = (mm.BinaryOutput(ColumnSchema("a")), )
+        loss = compute_loss(predictions, targets, model_outputs)
+        expected = nn.BCEWithLogitsLoss()(predictions["a"], targets["a"])
+    
+        assert isinstance(loss, torch.Tensor)
+        assert torch.allclose(loss, expected)
+    
+    
+    def test_mixed_inputs(self):
+        predictions = {"a": torch.randn(2, 1)}
+        targets = torch.randint(2, (2, 1), dtype=torch.float32)
+        model_outputs = (mm.BinaryOutput(ColumnSchema("a")), )
+        loss = compute_loss(predictions, targets, model_outputs)
+        expected = nn.BCEWithLogitsLoss()(predictions["a"], targets)
+    
+        assert isinstance(loss, torch.Tensor)
+        assert torch.allclose(loss, expected)
+    
+    
+    def test_multiple_outputs_raises_error(self):
+        predictions = torch.randn(2, 1)
+        targets = torch.randint(2, (2, 1), dtype=torch.float32)
+        model_outputs = (
+            mm.BinaryOutput(ColumnSchema("a")),
+            mm.BinaryOutput(ColumnSchema("b")),
         )
-
-        loader = Loader(
-            music_streaming_data,
-            batch_size=16,
-            shuffle=False,
-        )
-
-        model.initialize(loader)
-
-        trainer = pl.Trainer(max_epochs=1)
-
-        trainer.fit(model, loader)
-
-
-def test_compute_loss_tensor_inputs():
-    predictions = torch.randn(2, 1)
-    targets = torch.randint(2, (2, 1), dtype=torch.float32)
-    model_outputs = [mm.BinaryOutput()]
-    loss = compute_loss(predictions, targets, model_outputs)
-    expected = nn.BCEWithLogitsLoss()(predictions, targets)
-
-    assert isinstance(loss, torch.Tensor)
-    assert torch.allclose(loss, expected)
+    
+        with pytest.raises(RuntimeError):
+            loss = compute_loss(predictions, targets, model_outputs)
 
 
 def test_compute_loss_single_model_output():

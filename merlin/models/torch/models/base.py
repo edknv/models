@@ -50,14 +50,21 @@ class Model(pl.LightningModule):
     def initialize(self, data: Loader):
         return initialize(self, data)
 
-    def forward(self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None):
-        return module_utils.apply(self.blocks, inputs)
+    def forward(self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]]):
+        #return module_utils.apply(self.blocks, inputs)
+        outputs = inputs
+        for module in self.blocks:
+            outputs = module(outputs)
+        return outputs
 
     def training_step(self, batch, batch_idx):
         del batch_idx
         inputs, targets = batch
         predictions = self(inputs)
-        loss = compute_loss(predictions, targets)
+
+        if not isinstance(self.last(), mm.ModelOutput):
+            raise RuntimeError("The last block must be a ModelOutput.")
+        loss = compute_loss(predictions, targets, (self.last(), ))
         return loss
 
     def configure_optimizers(self):
@@ -97,22 +104,37 @@ class Model(pl.LightningModule):
 
 def compute_loss(
     predictions: Union[torch.Tensor, Dict[str, torch.Tensor]],
-    targets: Union[torch.Tensor, Dict[str, torch.Tensor]],
+    targets: Optional[Union[torch.Tensor, Dict[str, torch.Tensor]]],
     model_outputs: Tuple[ModelOutput],
 ) -> torch.Tensor:
     """
     Update targets with model_out.target for each model_out
     """
     if isinstance(predictions, torch.Tensor) and isinstance(targets, torch.Tensor):
-        if len(model_outputs) != 1:
+        if len(model_outputs) > 1:
             raise RuntimeError("Multiple outputs but only one target was provided.")
         return model_outputs[0].loss(predictions, targets)
 
     loss = torch.tensor(0.0)
     for model_out in model_outputs:
         name = model_out.output_schema.first.name
+
+        if targets is None:
+            _targets = model_out.target
+        elif isinstance(targets, torch.Tensor):
+            _targets = targets
+        elif isinstance(targets, dict):
+            _targets = targets[name]
+        #_targets = torch.squeeze(_targets).double()
+
+        if isinstance(predictions, torch.Tensor):
+            _predictions = predictions
+        elif isinstance(predictions, dict):
+            _predictions = predictions[name]
+        #_predictions = torch.squeeze(_predictions)
+
         # TODO: How to handle task weights?
-        loss += model_out.loss(predictions[name], targets[name])
+        loss += model_out.loss(_predictions, _targets)
 
     return loss / len(model_outputs)
 
@@ -146,8 +168,8 @@ def initialize(module, data: Loader):
     else:
         batch = data
 
-    #module.to(get_device(batch))
-    return module(batch)
+    module.to(get_device(batch.features))
+    return module(batch.features)
 
 
 def get_device(data):
