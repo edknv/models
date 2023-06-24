@@ -39,8 +39,6 @@ class Model(LightningModule, Block):
     ----------
     *blocks: nn.Module
         One or more blocks that make up the core functionality of the model.
-    schema: Schema, optional
-        A Merlin schema. Default is None.
     optimizer: torch.optim.Optimizer, optional
         A PyTorch optimizer from the PyTorch library (or any custom optimizer
         that follows the same API). Default is Adam optimizer.
@@ -195,6 +193,11 @@ def compute_loss(
             _predictions = predictions
         else:
             raise ValueError(f"Unknown 'predictions' type: {type(predictions)}")
+
+        if _targets.shape != _predictions.shape:
+            _targets = _targets.view(_predictions.shape)
+        if _targets.dtype != _predictions.dtype:
+            _targets = _targets.to(dtype=_predictions.dtype)
 
         results["loss"] = results["loss"] + model_out.loss(_predictions, _targets) / len(
             model_outputs

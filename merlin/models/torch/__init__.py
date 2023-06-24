@@ -27,6 +27,7 @@ from merlin.models.torch.outputs.classification import BinaryOutput
 from merlin.models.torch.outputs.regression import RegressionOutput
 from merlin.models.torch.outputs.tabular import TabularOutputBlock
 from merlin.models.torch.router import RouterBlock
+from merlin.models.torch.trainer import Trainer
 from merlin.models.torch.transforms.agg import Concat, Stack
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     "Concat",
     "Stack",
     "schema",
+    "Trainer",
 ]
