@@ -97,7 +97,7 @@ class BinaryOutput(ModelOutput):
         output += schema.select_by_tag([Tags.BINARY_CLASSIFICATION, Tags.BINARY])
         for col in schema.select_by_tag([Tags.CATEGORICAL]):
             if col.int_domain and col.int_domain.max == 1:
-                output += col
+                output += Schema([col])
 
         return output
 
@@ -189,7 +189,7 @@ class CategoricalOutput(ModelOutput):
         output = Schema()
         for col in schema.select_by_tag([Tags.CATEGORICAL]):
             if col.int_domain and col.int_domain.max > 1:
-                output += col
+                output += Schema([col])
 
         return output
 
