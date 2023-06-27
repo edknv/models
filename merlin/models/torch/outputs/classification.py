@@ -49,11 +49,15 @@ class BinaryOutput(ModelOutput):
         super().__init__(
             nn.LazyLinear(1),
             nn.Sigmoid(),
-            schema=schema,
             loss=loss,
             logits_temperature=logits_temperature,
             metrics=metrics,
         )
+        if schema:
+            self.setup_schema(schema)
+
+        if not self.metrics:
+            self.metrics = self.default_metrics()
 
     def setup_schema(self, target: Optional[Union[ColumnSchema, Schema]]):
         """Set up the schema for the output.
@@ -76,8 +80,6 @@ class BinaryOutput(ModelOutput):
             )
 
         self.output_schema = Schema([_target])
-        if not self.metrics:
-            self.metrics = self.default_metrics()
 
     def default_metrics(self) -> List[Metric]:
         return [
@@ -102,9 +104,15 @@ class BinaryOutput(ModelOutput):
 class CategoricalOutput(ModelOutput):
     def __init__(
         self,
-        to_call: Union[
-            Schema, ColumnSchema, EmbeddingTable, "CategoricalTarget", "EmbeddingTablePrediction"
-        ],
+        to_call: Optional[
+            Union[
+                Schema,
+                ColumnSchema,
+                EmbeddingTable,
+                "CategoricalTarget",
+                "EmbeddingTablePrediction",
+            ]
+        ] = None,
         loss=nn.CrossEntropyLoss(),
         metrics: Optional[Sequence[Metric]] = None,
         logits_temperature: float = 1.0,
@@ -115,14 +123,19 @@ class CategoricalOutput(ModelOutput):
             logits_temperature=logits_temperature,
         )
 
-        if isinstance(to_call, (Schema, ColumnSchema)):
+        if to_call is None:
+            self.prepend(EmbeddingTablePrediction(EmbeddingTable()))
+        elif isinstance(to_call, (Schema, ColumnSchema)):
             self.setup_schema(to_call)
-        elif isinstance(to_call, EmbeddingTable):
+        elif isinstance(to_call, (EmbeddingTable)):
             self.prepend(EmbeddingTablePrediction(to_call))
         elif isinstance(to_call, (CategoricalTarget, EmbeddingTablePrediction)):
             self.prepend(to_call)
         else:
             raise ValueError(f"Invalid to_call type: {type(to_call)}")
+
+        if not self.metrics:
+            self.metrics = self.default_metrics()
 
     def setup_schema(self, target: Optional[Union[ColumnSchema, Schema]]):
         """Set up the schema for the output.
@@ -145,15 +158,12 @@ class CategoricalOutput(ModelOutput):
         self.output_schema = categorical_output_schema(target, self[0].num_classes)
         self.num_classes = to_call.num_classes
 
-        if not self.metrics:
-            self.metrics = self.default_metrics()
-
     def default_metrics(self) -> List[Metric]:
-        return (
+        return [
             AveragePrecision(task="multiclass", num_classes=self.num_classes),
             Precision(task="multiclass", num_classes=self.num_classes),
             Recall(task="multiclass", num_classes=self.num_classes),
-        )
+        ]
 
     @classmethod
     def schema_selection(cls, schema: Schema) -> Schema:
@@ -169,7 +179,7 @@ class CategoricalOutput(ModelOutput):
 class CategoricalTarget(nn.Module):
     def __init__(
         self,
-        feature: Union[Schema, ColumnSchema] = None,
+        feature: Optional[Union[Schema, ColumnSchema]] = None,
         activation=None,
         bias: bool = True,
     ):
