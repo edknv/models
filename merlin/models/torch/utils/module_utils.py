@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 import inspect
+import os
 from typing import Dict, Tuple, Union
 
 import torch
@@ -236,7 +237,8 @@ def initialize(module, data: Union[Dataset, Loader, Batch], dtype=torch.float32)
     if hasattr(module, "model_outputs"):
         for model_out in module.model_outputs():
             for metric in model_out.metrics:
-                metric.to(device=batch.device())
+                #metric.to(device=batch.device())
+                metric.to(device=torch.device(int(os.environ["LOCAL_RANK"])))
 
     from merlin.models.torch import schema
 

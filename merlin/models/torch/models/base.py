@@ -96,10 +96,7 @@ class Model(LightningModule, Block):
 
         predictions = self(features, batch=Batch(features, targets))
 
-        # TODO: Fix compute_metrics=True for multi-gpu
-        loss_and_metrics = compute_loss(
-            predictions, targets, self.model_outputs(), compute_metrics=False
-        )
+        loss_and_metrics = compute_loss(predictions, targets, self.model_outputs())
         for name, value in loss_and_metrics.items():
             self.log(f"train_{name}", value)
 
