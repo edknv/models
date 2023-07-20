@@ -37,13 +37,13 @@ def convert_state_dict(
             f"layers.{layer_idx}.attention.wo.weight"
         ].to(dtype)
         # mlp
-        converted[f"transformer.h.{layer_idx}.mlp.c_fc1.weight"] = state_dict[
+        converted[f"transformer.h.{layer_idx}.mlp.weights_1.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w1.weight"
         ].to(dtype)
-        converted[f"transformer.h.{layer_idx}.mlp.c_proj.weight"] = state_dict[
+        converted[f"transformer.h.{layer_idx}.mlp.projection.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w2.weight"
         ].to(dtype)
-        converted[f"transformer.h.{layer_idx}.mlp.c_fc2.weight"] = state_dict[
+        converted[f"transformer.h.{layer_idx}.mlp.weights_2.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w3.weight"
         ].to(dtype)
         # rms norm
@@ -61,9 +61,9 @@ shard_dims = {
     "wte.weight": 1,
     "attn.c_attn.weight": 0,
     "attn.c_proj.weight": 1,
-    "mlp.c_fc1.weight": 0,
-    "mlp.c_fc2.weight": 0,
-    "mlp.c_proj.weight": 1,
+    "mlp.weights_1.weight": 0,
+    "mlp.weights_2.weight": 0,
+    "mlp.projection.weight": 1,
 }
 
 

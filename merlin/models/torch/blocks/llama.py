@@ -11,12 +11,9 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from merlin.models.torch.utils.llama_utils import (
-    convert_checkpoint,
-    find_multiple,
-)
+from merlin.models.torch.blocks.mlp import PositionwiseFeedForward
 from merlin.models.torch.transforms.regularization import RMSNorm
-
+from merlin.models.torch.utils.llama_utils import convert_checkpoint, find_multiple
 
 Self = TypeVar("Self", bound="LlamaBlock")
 
@@ -176,7 +173,11 @@ class Block(nn.Module):
         self.rms_1 = RMSNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.rms_2 = RMSNorm(config.n_embd)
-        self.mlp = MLP(config)
+
+        hidden_dim = 4 * config.n_embd
+        n_hidden = int(2 * hidden_dim / 3)
+        n_hidden = find_multiple(n_hidden, 256)
+        self.mlp = PositionwiseFeedForward(config.n_embd, n_hidden, bias=False, activation=nn.SiLU)
 
     def forward(
         self,
@@ -263,23 +264,6 @@ class CausalSelfAttention(nn.Module):
         y = self.c_proj(y)
 
         return y, kv_cache
-
-
-class MLP(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
-        super().__init__()
-        hidden_dim = 4 * config.n_embd
-        n_hidden = int(2 * hidden_dim / 3)
-        n_hidden = find_multiple(n_hidden, 256)
-
-        self.c_fc1 = nn.Linear(config.n_embd, n_hidden, bias=False)
-        self.c_fc2 = nn.Linear(config.n_embd, n_hidden, bias=False)
-        self.c_proj = nn.Linear(n_hidden, config.n_embd, bias=False)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.silu(self.c_fc1(x)) * self.c_fc2(x)
-        x = self.c_proj(x)
-        return x
 
 
 def build_rope_cache(

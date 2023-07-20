@@ -84,8 +84,35 @@ class MLPBlock(Block):
         super().__init__(*modules)
 
 
+class PositionwiseFeedForward(nn.Module):
+    """Position-wise Feed-Forward network as proposed in [1]
+    References
+    ----------
+    [1] Position-wise Feed-Forward
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        intermediate_dim: int,
+        bias: bool = False,
+        activation=nn.ReLU,
+    ):
+        super().__init__()
+        self.weights_1 = nn.Linear(input_dim, intermediate_dim, bias=bias)
+        self.weights_2 = nn.Linear(input_dim, intermediate_dim, bias=bias)
+        self.projection = nn.Linear(intermediate_dim, input_dim, bias=bias)
+        if activation is not None:
+            self.activation = activation if isinstance(activation, nn.Module) else activation()
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        outputs = self.projection(self.activation(self.weights_1(inputs)) * self.weights_2(inputs))
+        return outputs
+
+
 @output_schema.register(nn.LazyLinear)
 @output_schema.register(nn.Linear)
 @output_schema.register(MLPBlock)
+@output_schema.register(PositionwiseFeedForward)
 def _output_schema_block(module: nn.LazyLinear, inputs: Schema):
     return output_schema.tensors(torch.ones((1, module.out_features), dtype=float))
