@@ -48,6 +48,29 @@ llama_configs = {
 }
 
 
+@dataclass
+class AttentionMask:
+    def __init__(self, bool_mask: Optional[torch.Tensor] = None) -> None:
+        self.bool_mask = bool_mask
+
+    def select(self, seq_length: int) -> torch.Tensor:
+        return self.bool_mask[:, :, :seq_length, :seq_length]
+
+    def select_position(self, position: torch.Tensor) -> torch.Tensor:
+        return self.bool_mask.index_select(2, position)
+
+
+def create_attention_mask(
+    max_seq_length: int, device: Optional[torch.device] = None
+) -> torch.Tensor:
+    ones = torch.ones(
+        (max_seq_length, max_seq_length),
+        device=device,
+        dtype=torch.bool,
+    )
+    return torch.tril(ones).unsqueeze(0).unsqueeze(0)
+
+
 class LlamaBlock(nn.Module):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
@@ -96,11 +119,14 @@ class LlamaBlock(nn.Module):
             )
 
         if self.mask_cache is None:
-            self.mask_cache = self.build_mask_cache(idx)
+            self.mask_cache = AttentionMask(
+                create_attention_mask(max_seq_length=max_seq_length, device=idx.device)
+            )
 
         if input_pos is not None:
-            mask = self.mask_cache.index_select(2, input_pos)
-            mask = mask[:, :, :, :max_seq_length]
+            # mask = self.mask_cache.index_select(2, input_pos)
+            # mask = mask[:, :, :, :max_seq_length]
+            mask = self.mask_cache.select_position(input_pos)
         else:
             mask = self.mask_cache[:, :, :T, :T]
 
@@ -157,10 +183,10 @@ class LlamaBlock(nn.Module):
 
     def reset_cache(self) -> None:
         self.kv_caches.clear()
-        if self.mask_cache.device.type == "xla":
-            # https://github.com/Lightning-AI/lit-parrot/pull/83#issuecomment-1558150179
-            self.rope_embeds = None
-            self.mask_cache = None
+        # if self.mask_cache.device.type == "xla":
+        #    # https://github.com/Lightning-AI/lit-parrot/pull/83#issuecomment-1558150179
+        #    self.rope_embeds = None
+        #    self.mask_cache = None
 
 
 class Block(nn.Module):
