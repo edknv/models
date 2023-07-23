@@ -19,7 +19,6 @@ from merlin.models.torch.utils.llama_utils import convert_checkpoint, find_multi
 Self = TypeVar("Self", bound="LlamaBlock")
 
 MaskCache = torch.Tensor
-RoPECache = torch.Tensor
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
 
@@ -64,7 +63,7 @@ class LlamaBlock(nn.Module):
             )
         )
 
-        self.rope_cache: Optional[RoPECache] = None
+        self.rotary_embeds: Optional[RotaryEmbeddings] = None
         self.mask_cache: Optional[MaskCache] = None
         self.kv_caches: List[KVCache] = []
 
@@ -90,9 +89,8 @@ class LlamaBlock(nn.Module):
         if max_seq_length is None:
             max_seq_length = block_size
 
-        if self.rope_cache is None:
-            # self.rope_cache = self.build_rope_cache(idx)
-            self.rope_cache = RotaryEmbeddings(
+        if self.rotary_embeds is None:
+            self.rotary_embeds = RotaryEmbeddings(
                 self.config.n_embd // self.config.n_head,
                 self.config.block_size,
             )
@@ -101,14 +99,12 @@ class LlamaBlock(nn.Module):
             self.mask_cache = self.build_mask_cache(idx)
 
         if input_pos is not None:
-            # rope = self.rope_cache.index_select(0, input_pos)
             mask = self.mask_cache.index_select(2, input_pos)
             mask = mask[:, :, :, :max_seq_length]
         else:
-            # rope = self.rope_cache[:T]
             mask = self.mask_cache[:, :, :T, :T]
 
-        rope = self.rope_cache
+        rope = self.rotary_embeds
 
         # forward the model itself
         x = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
@@ -153,14 +149,6 @@ class LlamaBlock(nn.Module):
         model.load_state_dict(state_dict)
         return model
 
-    def build_rope_cache(self, idx: torch.Tensor) -> RoPECache:
-        return build_rope_cache(
-            seq_len=self.config.block_size,
-            n_elem=self.config.n_embd // self.config.n_head,
-            dtype=idx.dtype,
-            device=idx.device,
-        )
-
     def build_mask_cache(self, idx: torch.Tensor) -> MaskCache:
         ones = torch.ones(
             (self.config.block_size, self.config.block_size), device=idx.device, dtype=torch.bool
@@ -171,7 +159,7 @@ class LlamaBlock(nn.Module):
         self.kv_caches.clear()
         if self.mask_cache.device.type == "xla":
             # https://github.com/Lightning-AI/lit-parrot/pull/83#issuecomment-1558150179
-            self.rope_cache = None
+            self.rope_embeds = None
             self.mask_cache = None
 
 
@@ -190,7 +178,7 @@ class Block(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        rope: RoPECache,
+        rope,
         mask: MaskCache,
         max_seq_length: int,
         input_pos: Optional[torch.Tensor] = None,
@@ -219,7 +207,7 @@ class CausalSelfAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        rope: RoPECache,
+        rope,
         mask: MaskCache,
         max_seq_length: int,
         input_pos: Optional[torch.Tensor] = None,
@@ -274,49 +262,3 @@ class CausalSelfAttention(nn.Module):
         y = self.c_proj(y)
 
         return y, kv_cache
-
-
-def build_rope_cache(
-    seq_len: int, n_elem: int, dtype: torch.dtype, device: torch.device, base: int = 10000
-) -> RoPECache:
-    """Enhanced Transformer with Rotary Position Embedding.
-
-    Derived from: https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/labml_nn/
-    transformers/rope/__init__.py. MIT License:
-    https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/license.
-    """
-    # $\Theta = {\theta_i = 10000^{\frac{2(i-1)}{d}}, i \in [1, 2, ..., \frac{d}{2}]}$
-    theta = 1.0 / (base ** (torch.arange(0, n_elem, 2, dtype=dtype, device=device) / n_elem))
-
-    # Create position indexes `[0, 1, ..., seq_len - 1]`
-    seq_idx = torch.arange(seq_len, dtype=dtype, device=device)
-
-    # Calculate the product of position index and $\theta_i$
-    idx_theta = torch.outer(seq_idx, theta).float()
-
-    cache = torch.stack([torch.cos(idx_theta), torch.sin(idx_theta)], dim=-1)
-
-    # this is to mimic the behaviour of complex32, else we will get different results
-    if dtype in (torch.float16, torch.bfloat16, torch.int8):
-        cache = cache.half()
-    return cache
-
-
-def apply_rope(x: torch.Tensor, rope_cache: RoPECache) -> torch.Tensor:
-    # truncate to support variable sizes
-    T = x.size(1)
-    rope_cache = rope_cache[:T]
-
-    # cast because the reference does
-    xshaped = x.float().reshape(*x.shape[:-1], -1, 2)
-    rope_cache = rope_cache.view(1, xshaped.size(1), 1, xshaped.size(3), 2)
-    x_out2 = torch.stack(
-        [
-            xshaped[..., 0] * rope_cache[..., 0] - xshaped[..., 1] * rope_cache[..., 1],
-            xshaped[..., 1] * rope_cache[..., 0] + xshaped[..., 0] * rope_cache[..., 1],
-        ],
-        -1,
-    )
-
-    x_out2 = x_out2.flatten(3)
-    return x_out2.type_as(x)
