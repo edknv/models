@@ -166,3 +166,60 @@ class CrossAttentionBlock(Block):
             raise RuntimeError(f"Could not find {self.seq_key} in input dictionary, got: {x}.")
 
         return x[self.seq_key]
+
+
+class RotaryEmbeddings(nn.Module):
+    def __init__(self, dim: int, max_seq_length: int, base: int = 10000) -> None:
+        super().__init__()
+        self.max_seq_length = max_seq_length
+        self.dim = dim
+        self.base = base
+
+        self.cache = None
+        self._is_initialized = False
+
+    def is_initialized(self) -> bool:
+        return self._is_initialized
+
+    def initialize(
+        self, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None
+    ) -> None:
+        inverse_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2, dtype=dtype, device=device) / self.dim)
+        )
+        self.register_buffer("inverse_freq", inverse_freq, persistent=False)
+
+        position = torch.arange(self.max_seq_length, dtype=dtype, device=device)
+        freq = torch.outer(position, self.inverse_freq).float()
+        cache = torch.stack([torch.cos(freq), torch.sin(freq)], dim=-1)
+        # this is to mimic the behaviour of complex32, else we will get different results
+        if dtype in (torch.float16, torch.bfloat16, torch.int8):
+            cache = cache.half()
+
+        self.cache = cache
+        self._is_initialized = True
+
+    def forward(
+        self, inputs: torch.Tensor, positions: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if not self.is_initialized():
+            self.initialize()
+
+        batch_size, seq_length, width, _ = inputs.size()
+
+        if positions is not None:
+            _cache = self.cache.index_select(0, positions)
+        else:
+            _cache = self.cache[:seq_length]
+
+        _inputs = inputs.float().reshape(batch_size, seq_length, width, -1, 2)
+        _cache = _cache.view(1, _inputs.size(1), 1, _inputs.size(3), 2)
+        outputs = torch.stack(
+            [
+                _inputs[..., 0] * _cache[..., 0] - _inputs[..., 1] * _cache[..., 1],
+                _inputs[..., 1] * _cache[..., 0] + _inputs[..., 0] * _cache[..., 1],
+            ],
+            -1,
+        )
+
+        return outputs.flatten(3).type_as(inputs)
