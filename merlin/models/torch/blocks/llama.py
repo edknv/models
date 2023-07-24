@@ -52,42 +52,27 @@ llama_configs = {
 }
 
 
-class LlamaBlock(nn.Module):
+class LlamaTransformer(nn.Module):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
         assert config.padded_vocab_size is not None
         self.config = config
 
-        self.lm_head = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
-        self.transformer = nn.ModuleDict(
-            dict(
-                wte=nn.Embedding(config.padded_vocab_size, config.n_embd),
-                h=nn.ModuleList(Block(config) for _ in range(config.n_layer)),
-                ln_f=RMSNorm(config.n_embd),
-            )
-        )
+        self.wte = nn.Embedding(config.padded_vocab_size, config.n_embd)
+        self.h = nn.ModuleList(Block(config) for _ in range(config.n_layer))
+        self.ln_f = RMSNorm(config.n_embd)
 
         self.rotary_embeds: Optional[RotaryEmbeddings] = None
         self.mask_cache: Optional[AttentionMask] = None
         self.kv_caches: List[KVCache] = []
 
-    def _init_weights(self, module: nn.Module) -> None:
-        if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(
-                module.weight, mean=0.0, std=0.02 / math.sqrt(2 * self.config.n_layer)
-            )
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(
-                module.weight, mean=0.0, std=0.02 / math.sqrt(2 * self.config.n_layer)
-            )
-
     def forward(
         self,
-        idx: torch.Tensor,
+        inputs: torch.Tensor,
         max_seq_length: Optional[int] = None,
-        input_pos: Optional[torch.Tensor] = None,
+        positions: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[KVCache]]]:
-        B, T = idx.size()
+        batch_size, seq_length = inputs.size()
 
         block_size = self.config.block_size
         if max_seq_length is None:
@@ -101,28 +86,28 @@ class LlamaBlock(nn.Module):
 
         if self.mask_cache is None:
             self.mask_cache = AttentionMask(
-                create_attention_mask(max_seq_length=max_seq_length, device=idx.device)
+                create_attention_mask(max_seq_length=max_seq_length, device=inputs.device)
             )
 
-        if input_pos is not None:
-            # mask = self.mask_cache.index_select(2, input_pos)
+        if positions is not None:
+            # mask = self.mask_cache.index_select(2, positions)
             # mask = mask[:, :, :, :max_seq_length]
-            mask = self.mask_cache.select_position(input_pos)
+            mask = self.mask_cache.select_position(positions)
         else:
-            mask = self.mask_cache[:, :, :T, :T]
+            mask = self.mask_cache.select(seq_length)
 
         rope = self.rotary_embeds
 
         # forward the model itself
-        x = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
+        x = self.wte(inputs)  # token embeddings of shape (b, t, n_embd)
 
-        if input_pos is None:  # proxy for use_cache=False
-            for block in self.transformer.h:
+        if positions is None:  # proxy for use_cache=False
+            for block in self.h:
                 x, _ = block(x, rope, mask, max_seq_length)
         else:
             if not self.kv_caches:
                 head_size = self.config.n_embd // self.config.n_head
-                cache_shape = (B, self.config.n_head, max_seq_length, head_size)
+                cache_shape = (batch_size, self.config.n_head, max_seq_length, head_size)
                 self.kv_caches = [
                     (
                         torch.zeros(cache_shape, device=x.device, dtype=x.dtype),
@@ -130,38 +115,18 @@ class LlamaBlock(nn.Module):
                     )
                     for _ in range(self.config.n_layer)
                 ]
-            for i, block in enumerate(self.transformer.h):
+            for i, block in enumerate(self.h):
                 x, self.kv_caches[i] = block(
-                    x, rope, mask, max_seq_length, input_pos, self.kv_caches[i]
+                    x, rope, mask, max_seq_length, positions, self.kv_caches[i]
                 )
 
-        x = self.transformer.ln_f(x)
+        x = self.ln_f(x)
 
-        logits = self.lm_head(x)  # (b, t, vocab_size)
-
-        return logits
+        return x
 
     @classmethod
     def from_name(cls, model_size: str) -> Self:
         return cls(LlamaConfig.from_name(model_size))
-
-    @classmethod
-    def from_checkpoint(cls, checkpoint_dir, model_size="7B", device=None, dtype=None):
-        # model = cls.from_name(model_size)
-        # state_dict = torch.load(checkpoint_dir)
-        # model.load_state_dict(state_dict)
-
-        model = cls.from_name(model_size)
-        state_dict = convert_checkpoint(checkpoint_dir, model_size)
-        model.load_state_dict(state_dict)
-        return model
-
-    def reset_cache(self) -> None:
-        self.kv_caches.clear()
-        # if self.mask_cache.device.type == "xla":
-        #    # https://github.com/Lightning-AI/lit-parrot/pull/83#issuecomment-1558150179
-        #    self.rope_embeds = None
-        #    self.mask_cache = None
 
 
 class Block(nn.Module):
@@ -186,10 +151,43 @@ class Block(nn.Module):
         rope,
         mask: Optional[AttentionMask],
         max_seq_length: int,
-        input_pos: Optional[torch.Tensor] = None,
+        positions: Optional[torch.Tensor] = None,
         kv_cache: Optional[KVCache] = None,
     ) -> Tuple[torch.Tensor, Optional[KVCache]]:
-        h, new_kv_cache = self.attn(self.rms_1(x), rope, mask, max_seq_length, input_pos, kv_cache)
+        h, new_kv_cache = self.attn(self.rms_1(x), rope, mask, max_seq_length, positions, kv_cache)
         x = x + h
         x = x + self.mlp(self.rms_2(x))
         return x, new_kv_cache
+
+
+class LlamaBlock(nn.Module):
+    def __init__(self, config: LlamaConfig) -> None:
+        super().__init__()
+        assert config.padded_vocab_size is not None
+        self.config = config
+
+        self.transformer = LlamaTransformer(config)
+        self.lm_head = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        max_seq_length: Optional[int] = None,
+        positions: Optional[torch.Tensor] = None,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[KVCache]]]:
+        outputs = self.transformer(inputs, max_seq_length=max_seq_length, positions=positions)
+        logits = self.lm_head(outputs)
+        return logits
+
+    @classmethod
+    def from_name(cls, model_size: str) -> Self:
+        return cls(LlamaConfig.from_name(model_size))
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint_dir, model_size="7B", device=None, dtype=None):
+        model = cls.from_name(model_size)
+        state_dict = convert_checkpoint(checkpoint_dir, model_size)
+        model.load_state_dict(state_dict)
+        return model
+
+    def reset_cache(self) -> None:
+        self.transformer.kv_caches.clear()
