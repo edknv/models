@@ -107,8 +107,8 @@ class LlamaBlock(Block):
     def get_tokens(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
         return inputs[self.token_key]
 
-    def get_positions(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
-        return inputs[self.position_key]
+    def get_positions(self, inputs: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
+        return inputs.get(self.position_key)
 
 
 class LlamaTransformer(nn.Module):

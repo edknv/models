@@ -2,6 +2,7 @@ import torch
 
 import merlin.models.torch as mm
 from merlin.models.torch.utils import module_utils
+from merlin.models.torch.blocks.llama import LlamaTransformer
 
 
 class TestLlamaBlock:
@@ -21,6 +22,19 @@ class TestLlamaBlock:
 
     def test_forward(self):
         out = self.llama(self.input_dict)
+        assert isinstance(out, torch.Tensor)
+        assert out.shape[:-1] == self.input_dict["token"].shape
+        assert out.shape[-1] == self.llama_config.embedding_dim
+
+    def test_forward_without_position(self):
+        self.input_dict.pop("position")
+        out = self.llama(self.input_dict)
+        assert isinstance(out, torch.Tensor)
+        assert out.shape[:-1] == self.input_dict["token"].shape
+        assert out.shape[-1] == self.llama_config.embedding_dim
+
+    def test_forward_tensor(self):
+        out = self.llama(self.input_dict["token"])
         assert isinstance(out, torch.Tensor)
         assert out.shape[:-1] == self.input_dict["token"].shape
         assert out.shape[-1] == self.llama_config.embedding_dim
