@@ -8,8 +8,14 @@ from tqdm import tqdm
 
 def llama_model_lookup(checkpoint: dict) -> str:
     """Returns the LLaMA model name from the checkpoint."""
-    embedding_size = checkpoint["transformer.token_embeddings.weight"].shape[1]
-    return llama_model_sizes[embedding_size]
+    from merlin.models.torch.blocks.llama import LLAMA_CONFIGS
+
+    embedding_dim = checkpoint["transformer.token_embeddings.weight"].shape[1]
+    for name, configs in LLAMA_CONFIGS.items():
+        if configs["embedding_dim"] == embedding_dim:
+            return name
+
+    raise RuntimeError("Could not find model name from checkpoint.")
 
 
 def convert_state_dict(

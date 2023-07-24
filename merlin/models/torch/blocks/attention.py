@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import astuple, dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Union
 
 import torch
 from torch import nn
@@ -342,7 +342,7 @@ class CausalSelfAttention(nn.Module):
             cache_k, cache_v = astuple(self.kv_cache)
             # check if reached token limit
             if positions[-1] >= self.max_seq_length:
-                positions = torch.tensor(max_seq_length - 1, device=positions.device)
+                positions = torch.tensor(self.max_seq_length - 1, device=positions.device)
                 # shift 1 position to the left
                 cache_k = torch.roll(cache_k, -1, dims=2)
                 cache_v = torch.roll(cache_v, -1, dims=2)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, TypeVar, Union
+from typing import Optional, TypeVar
 
 import torch
 import torch.nn as nn
@@ -12,19 +12,23 @@ from merlin.models.torch.blocks.attention import (
 )
 from merlin.models.torch.blocks.mlp import PositionwiseFeedForward
 from merlin.models.torch.transforms.regularization import RMSNorm
-from merlin.models.torch.utils.llama_utils import convert_checkpoint, find_multiple
+from merlin.models.torch.utils.llama_utils import (
+    convert_checkpoint,
+    find_multiple,
+    llama_model_lookup,
+)
 
 Self = TypeVar("Self", bound="LlamaBlock")
 
 
 @dataclass
 class LlamaConfig:
-    block_size: int = 2048
+    max_seq_length: int = 2048
     vocab_size: int = 32_000
     padded_vocab_size: Optional[int] = None
-    n_layer: int = 32
-    n_head: int = 32
-    n_embd: int = 4096
+    num_layers: int = 32
+    num_heads: int = 32
+    embedding_dim: int = 4096
 
     def __post_init__(self):
         if self.padded_vocab_size is None:
@@ -36,10 +40,10 @@ class LlamaConfig:
 
 
 LLAMA_CONFIGS = {
-    "7B": dict(n_layer=32, n_head=32, n_embd=4096),
-    "13B": dict(n_layer=40, n_head=40, n_embd=5120),
-    "30B": dict(n_layer=60, n_head=52, n_embd=6656),
-    "65B": dict(n_layer=80, n_head=64, n_embd=8192),
+    "7B": dict(num_layers=32, num_heads=32, embedding_dim=4096),
+    "13B": dict(num_layers=40, num_heads=40, embedding_dim=5120),
+    "30B": dict(num_layers=60, num_heads=52, embedding_dim=6656),
+    "65B": dict(num_layers=80, num_heads=64, embedding_dim=8192),
 }
 
 
@@ -50,10 +54,12 @@ class LlamaBlock(nn.Module):
         assert config.padded_vocab_size is not None
 
         self.config = config
-        self.max_seq_length = max_seq_length or config.block_size
+        self.max_seq_length = max_seq_length or config.max_seq_length
 
         self.transformer = LlamaTransformer(config)
-        self.output_embeddings = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
+        self.output_embeddings = nn.Linear(
+            config.embedding_dim, config.padded_vocab_size, bias=False
+        )
 
     def forward(
         self,
@@ -70,9 +76,12 @@ class LlamaBlock(nn.Module):
         return cls(LlamaConfig.from_name(model_size))
 
     @classmethod
-    def from_checkpoint(cls, checkpoint_dir, model_size="7B", device=None, dtype=None):
-        model = cls.from_name(model_size)
+    def from_checkpoint(
+        cls, checkpoint_dir, model_size: Optional[str] = None, device=None, dtype=None
+    ):
         state_dict = convert_checkpoint(checkpoint_dir, model_size)
+        model_size = model_size or llama_model_lookup(state_dict)
+        model = cls.from_name(model_size)
         model.load_state_dict(state_dict)
         return model
 
@@ -87,25 +96,25 @@ class LlamaTransformer(nn.Module):
         assert config.padded_vocab_size is not None
 
         self.config = config
-        self.max_seq_length = max_seq_length or config.block_size
+        self.max_seq_length = max_seq_length or config.max_seq_length
 
         self.rotary_embeds = RotaryEmbeddings(
-            self.config.n_embd // self.config.n_head,
-            self.config.block_size,
+            self.config.embedding_dim // self.config.num_heads,
+            self.config.max_seq_length,
         )
         self.mask_cache = AttentionMask(create_attention_mask(max_seq_length=self.max_seq_length))
 
-        self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.n_embd)
+        self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.embedding_dim)
         self.heads = nn.ModuleList(
             LlamaAttentionHead(
-                num_heads=config.n_head,
-                embedding_dim=config.n_embd,
+                num_heads=config.num_heads,
+                embedding_dim=config.embedding_dim,
                 max_seq_length=self.max_seq_length,
                 rotary_embeds=self.rotary_embeds,
             )
-            for _ in range(config.n_layer)
+            for _ in range(config.num_layers)
         )
-        self.layernorm = RMSNorm(config.n_embd)
+        self.layernorm = RMSNorm(config.embedding_dim)
 
     def forward(
         self,
