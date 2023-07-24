@@ -1,5 +1,6 @@
 from copy import deepcopy
-from typing import Dict, Optional, Union
+from dataclasses import dataclass
+from typing import Dict, Optional, Union, Tuple
 
 import torch
 from torch import nn
@@ -223,3 +224,112 @@ class RotaryEmbeddings(nn.Module):
         )
 
         return outputs.flatten(3).type_as(inputs)
+
+
+@dataclass
+class AttentionMask:
+    def __init__(self, bool_mask: Optional[torch.Tensor] = None) -> None:
+        self.bool_mask = bool_mask
+
+    def select(self, seq_length: int) -> torch.Tensor:
+        return self.bool_mask[:, :, :seq_length, :seq_length]
+
+    def select_position(self, position: torch.Tensor) -> torch.Tensor:
+        return self.bool_mask.index_select(2, position)
+
+
+def create_attention_mask(
+    max_seq_length: int, device: Optional[torch.device] = None
+) -> torch.Tensor:
+    ones = torch.ones(
+        (max_seq_length, max_seq_length),
+        device=device,
+        dtype=torch.bool,
+    )
+    return torch.tril(ones).unsqueeze(0).unsqueeze(0)
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(
+        self,
+        num_heads: int,
+        embedding_dim: int,
+        max_seq_length: int,
+        bias: bool = False,
+        dropout_p: float = 0.0,
+    ) -> None:
+
+        super().__init__()
+
+        if embedding_dim % num_heads != 0:
+            raise ValueError(
+                "The embedding dimension must be divible by the number of self-attention heads"
+            )
+
+        # key, query, value projections for all heads, but in a batch
+        self.c_attn = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
+        # output projection
+        self.c_proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
+
+        self.num_heads = num_heads
+        self.embedding_dim = embedding_dim
+        self.max_seq_length = max_seq_length
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        rope,
+        mask: AttentionMask,
+        max_seq_length: int,
+        input_pos: Optional[torch.Tensor] = None,
+        kv_cache=None,
+    ) -> torch.Tensor:
+        B, T, C = x.size()  # batch size, sequence length, embedding dimensionality (embedding_dim)
+
+        # calculate query, key, values for all heads in batch
+        # and move head forward to be the batch dim
+        q, k, v = self.c_attn(x).split(self.embedding_dim, dim=2)
+
+        head_size = C // self.num_heads
+        k = k.view(B, T, self.num_heads, head_size)
+        q = q.view(B, T, self.num_heads, head_size)
+        v = v.view(B, T, self.num_heads, head_size)
+
+        # q = apply_rope(q, rope)
+        # k = apply_rope(k, rope)
+        q = rope(q, input_pos)
+        k = rope(k, input_pos)
+
+        k = k.transpose(1, 2)  # (B, nh, T, hs)
+        q = q.transpose(1, 2)  # (B, nh, T, hs)
+        v = v.transpose(1, 2)  # (B, nh, T, hs)
+
+        if kv_cache is not None:
+            cache_k, cache_v = kv_cache
+            # check if reached token limit
+            if input_pos[-1] >= max_seq_length:
+                input_pos = torch.tensor(max_seq_length - 1, device=input_pos.device)
+                # shift 1 position to the left
+                cache_k = torch.roll(cache_k, -1, dims=2)
+                cache_v = torch.roll(cache_v, -1, dims=2)
+            k = cache_k.index_copy(2, input_pos, k)
+            v = cache_v.index_copy(2, input_pos, v)
+            kv_cache = k, v
+
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        #  att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        #  att = att.masked_fill(mask[:,:,:T,:T] == 0, float('-inf'))
+        #  att = F.softmax(att, dim=-1)
+        #  y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+
+        # efficient attention using Flash Attention CUDA kernels
+        y = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
+
+        y = (
+            y.transpose(1, 2).contiguous().view(B, T, C)
+        )  # re-assemble all head outputs side by side
+
+        # output projection
+        y = self.c_proj(y)
+
+        return y, kv_cache

@@ -11,14 +11,18 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from merlin.models.torch.blocks.attention import RotaryEmbeddings
+from merlin.models.torch.blocks.attention import (
+    RotaryEmbeddings,
+    CausalSelfAttention,
+    AttentionMask,
+    create_attention_mask,
+)
 from merlin.models.torch.blocks.mlp import PositionwiseFeedForward
 from merlin.models.torch.transforms.regularization import RMSNorm
 from merlin.models.torch.utils.llama_utils import convert_checkpoint, find_multiple
 
 Self = TypeVar("Self", bound="LlamaBlock")
 
-MaskCache = torch.Tensor
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 
 
@@ -48,29 +52,6 @@ llama_configs = {
 }
 
 
-@dataclass
-class AttentionMask:
-    def __init__(self, bool_mask: Optional[torch.Tensor] = None) -> None:
-        self.bool_mask = bool_mask
-
-    def select(self, seq_length: int) -> torch.Tensor:
-        return self.bool_mask[:, :, :seq_length, :seq_length]
-
-    def select_position(self, position: torch.Tensor) -> torch.Tensor:
-        return self.bool_mask.index_select(2, position)
-
-
-def create_attention_mask(
-    max_seq_length: int, device: Optional[torch.device] = None
-) -> torch.Tensor:
-    ones = torch.ones(
-        (max_seq_length, max_seq_length),
-        device=device,
-        dtype=torch.bool,
-    )
-    return torch.tril(ones).unsqueeze(0).unsqueeze(0)
-
-
 class LlamaBlock(nn.Module):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
@@ -87,7 +68,7 @@ class LlamaBlock(nn.Module):
         )
 
         self.rotary_embeds: Optional[RotaryEmbeddings] = None
-        self.mask_cache: Optional[MaskCache] = None
+        self.mask_cache: Optional[AttentionMask] = None
         self.kv_caches: List[KVCache] = []
 
     def _init_weights(self, module: nn.Module) -> None:
@@ -175,12 +156,6 @@ class LlamaBlock(nn.Module):
         model.load_state_dict(state_dict)
         return model
 
-    def build_mask_cache(self, idx: torch.Tensor) -> MaskCache:
-        ones = torch.ones(
-            (self.config.block_size, self.config.block_size), device=idx.device, dtype=torch.bool
-        )
-        return torch.tril(ones).unsqueeze(0).unsqueeze(0)
-
     def reset_cache(self) -> None:
         self.kv_caches.clear()
         # if self.mask_cache.device.type == "xla":
@@ -193,7 +168,11 @@ class Block(nn.Module):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
         self.rms_1 = RMSNorm(config.n_embd)
-        self.attn = CausalSelfAttention(config)
+        self.attn = CausalSelfAttention(
+            num_heads=config.n_head,
+            embedding_dim=config.n_embd,
+            max_seq_length=config.block_size,
+        )
         self.rms_2 = RMSNorm(config.n_embd)
 
         hidden_dim = 4 * config.n_embd
@@ -205,7 +184,7 @@ class Block(nn.Module):
         self,
         x: torch.Tensor,
         rope,
-        mask: MaskCache,
+        mask: Optional[AttentionMask],
         max_seq_length: int,
         input_pos: Optional[torch.Tensor] = None,
         kv_cache: Optional[KVCache] = None,
@@ -214,77 +193,3 @@ class Block(nn.Module):
         x = x + h
         x = x + self.mlp(self.rms_2(x))
         return x, new_kv_cache
-
-
-class CausalSelfAttention(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
-        super().__init__()
-        assert config.n_embd % config.n_head == 0
-
-        # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
-        # output projection
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
-
-        self.n_head = config.n_head
-        self.n_embd = config.n_embd
-        self.block_size = config.block_size
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        rope,
-        mask: MaskCache,
-        max_seq_length: int,
-        input_pos: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
-    ) -> Tuple[torch.Tensor, Optional[KVCache]]:
-        B, T, C = x.size()  # batch size, sequence length, embedding dimensionality (n_embd)
-
-        # calculate query, key, values for all heads in batch
-        # and move head forward to be the batch dim
-        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
-
-        head_size = C // self.n_head
-        k = k.view(B, T, self.n_head, head_size)
-        q = q.view(B, T, self.n_head, head_size)
-        v = v.view(B, T, self.n_head, head_size)
-
-        # q = apply_rope(q, rope)
-        # k = apply_rope(k, rope)
-        q = rope(q, input_pos)
-        k = rope(k, input_pos)
-
-        k = k.transpose(1, 2)  # (B, nh, T, hs)
-        q = q.transpose(1, 2)  # (B, nh, T, hs)
-        v = v.transpose(1, 2)  # (B, nh, T, hs)
-
-        if kv_cache is not None:
-            cache_k, cache_v = kv_cache
-            # check if reached token limit
-            if input_pos[-1] >= max_seq_length:
-                input_pos = torch.tensor(max_seq_length - 1, device=input_pos.device)
-                # shift 1 position to the left
-                cache_k = torch.roll(cache_k, -1, dims=2)
-                cache_v = torch.roll(cache_v, -1, dims=2)
-            k = cache_k.index_copy(2, input_pos, k)
-            v = cache_v.index_copy(2, input_pos, v)
-            kv_cache = k, v
-
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        #  att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        #  att = att.masked_fill(mask[:,:,:T,:T] == 0, float('-inf'))
-        #  att = F.softmax(att, dim=-1)
-        #  y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-
-        # efficient attention using Flash Attention CUDA kernels
-        y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
-
-        y = (
-            y.transpose(1, 2).contiguous().view(B, T, C)
-        )  # re-assemble all head outputs side by side
-
-        # output projection
-        y = self.c_proj(y)
-
-        return y, kv_cache
