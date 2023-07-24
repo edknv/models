@@ -48,13 +48,12 @@ LLAMA_CONFIGS = {
 
 
 class LlamaBlock(nn.Module):
-    def __init__(self, config: LlamaConfig, max_seq_length: Optional[int] = None) -> None:
+    def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
 
         assert config.padded_vocab_size is not None
 
         self.config = config
-        self.max_seq_length = max_seq_length or config.max_seq_length
 
         self.transformer = LlamaTransformer(config)
         self.output_embeddings = nn.Linear(
@@ -64,7 +63,6 @@ class LlamaBlock(nn.Module):
     def forward(
         self,
         inputs: torch.Tensor,
-        max_seq_length: Optional[int] = None,
         positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         outputs = self.transformer(inputs, positions=positions)
@@ -91,25 +89,23 @@ class LlamaBlock(nn.Module):
 
 
 class LlamaTransformer(nn.Module):
-    def __init__(self, config: LlamaConfig, max_seq_length: Optional[int] = None) -> None:
+    def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
-        assert config.padded_vocab_size is not None
 
         self.config = config
-        self.max_seq_length = max_seq_length or config.max_seq_length
 
         self.rotary_embeds = RotaryEmbeddings(
             self.config.embedding_dim // self.config.num_heads,
             self.config.max_seq_length,
         )
-        self.mask_cache = AttentionMask(create_attention_mask(max_seq_length=self.max_seq_length))
+        self.mask_cache = AttentionMask(create_attention_mask(max_seq_length=self.config.max_seq_length))
 
         self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.embedding_dim)
         self.heads = nn.ModuleList(
             LlamaAttentionHead(
-                num_heads=config.num_heads,
-                embedding_dim=config.embedding_dim,
-                max_seq_length=self.max_seq_length,
+                num_heads=self.config.num_heads,
+                embedding_dim=self.config.embedding_dim,
+                max_seq_length=self.config.max_seq_length,
                 rotary_embeds=self.rotary_embeds,
             )
             for _ in range(config.num_layers)
@@ -165,7 +161,6 @@ class LlamaAttentionHead(nn.Module):
 
         self.num_heads = num_heads
         self.embedding_dim = embedding_dim
-        self.max_seq_length = max_seq_length
         self.max_seq_length = max_seq_length
         self.rotary_embeds = rotary_embeds
 
