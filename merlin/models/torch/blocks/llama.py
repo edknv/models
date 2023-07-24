@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional, TypeVar
+from typing import Dict, Optional, TypeVar, Union
 
 import torch
 import torch.nn as nn
 
+from merlin.models.torch.batch import Batch
+from merlin.models.torch.block import Block
 from merlin.models.torch.blocks.attention import (
     AttentionMask,
     CausalSelfAttention,
@@ -47,25 +49,40 @@ LLAMA_CONFIGS = {
 }
 
 
-class LlamaBlock(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
+class LlamaBlock(Block):
+    def __init__(
+        self,
+        config: LlamaConfig,
+        token_key: Optional[str] = None,
+        position_key: Optional[str] = None,
+    ) -> None:
         super().__init__()
 
         assert config.padded_vocab_size is not None
 
         self.config = config
+        self.token_key = token_key or "token"
+        self.position_key = position_key or "position"
 
         self.transformer = LlamaTransformer(config)
         self.output_embeddings = nn.Linear(
             config.embedding_dim, config.padded_vocab_size, bias=False
         )
 
+    # def forward(
+    #    self,
+    #    inputs: torch.Tensor,
+    #    positions: Optional[torch.Tensor] = None,
+    # ) -> torch.Tensor:
     def forward(
-        self,
-        inputs: torch.Tensor,
-        positions: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        outputs = self.transformer(inputs, positions=positions)
+        self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None
+    ):
+        if isinstance(inputs, torch.Tensor):
+            tokens, positions = inputs, None
+        elif isinstance(inputs, dict):
+            tokens, positions = self.get_tokens(inputs), self.get_positions(inputs)
+
+        outputs = self.transformer(tokens, positions=positions)
         logits = self.output_embeddings(outputs)
         return logits
 
@@ -87,9 +104,18 @@ class LlamaBlock(nn.Module):
         for head in self.transformer.heads:
             head.kv_cache = None
 
+    def get_tokens(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+        return inputs[self.token_key]
 
-class LlamaTransformer(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
+    def get_positions(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+        return inputs[self.position_key]
+
+
+class LlamaTransformer(Block):
+    def __init__(
+        self,
+        config: LlamaConfig,
+    ) -> None:
         super().__init__()
 
         self.config = config
@@ -98,7 +124,9 @@ class LlamaTransformer(nn.Module):
             self.config.embedding_dim // self.config.num_heads,
             self.config.max_seq_length,
         )
-        self.mask_cache = AttentionMask(create_attention_mask(max_seq_length=self.config.max_seq_length))
+        self.mask_cache = AttentionMask(
+            create_attention_mask(max_seq_length=self.config.max_seq_length)
+        )
 
         self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.embedding_dim)
         self.heads = nn.ModuleList(
@@ -114,31 +142,24 @@ class LlamaTransformer(nn.Module):
 
     def forward(
         self,
-        inputs: torch.Tensor,
+        tokens: torch.Tensor,
         positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        batch_size, seq_length = inputs.size()
+        batch_size, seq_length = tokens.size()
 
         if positions is not None:
             mask = self.mask_cache.select_position(positions)
         else:
             mask = self.mask_cache.select(seq_length)
 
-        x = self.token_embeddings(inputs)
+        x = self.token_embeddings(tokens)
 
-        if positions is None:
-            for block in self.heads:
-                x = block(
-                    x,
-                    mask=mask,
-                )
-        else:
-            for head in self.heads:
-                x = head(
-                    x,
-                    positions=positions,
-                    mask=mask,
-                )
+        for head in self.heads:
+            x = head(
+                x,
+                positions=positions,
+                mask=mask,
+            )
 
         x = self.layernorm(x)
 

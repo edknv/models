@@ -102,7 +102,7 @@ def generate(
 
         # forward
         #logits = model(x, max_seq_length, input_pos)
-        logits = model(x, input_pos)
+        logits = model({"token": x, "position": input_pos})
         logits = logits[0, -1] / temperature
 
         # optionally crop the logits to only the top k options
