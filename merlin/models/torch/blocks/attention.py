@@ -1,6 +1,6 @@
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Dict, Optional, Union, Tuple
+from dataclasses import astuple, dataclass
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -226,7 +226,6 @@ class RotaryEmbeddings(nn.Module):
         return outputs.flatten(3).type_as(inputs)
 
 
-@dataclass
 class AttentionMask:
     def __init__(self, bool_mask: Optional[torch.Tensor] = None) -> None:
         self.bool_mask = bool_mask
@@ -249,6 +248,29 @@ def create_attention_mask(
     return torch.tril(ones).unsqueeze(0).unsqueeze(0)
 
 
+@torch.jit.script
+@dataclass
+class KeyValueCache:
+    key: torch.Tensor
+    value: torch.Tensor
+
+
+def create_key_value_cache(
+    batch_size: int,
+    num_heads: int,
+    max_seq_length: int,
+    head_size: int,
+    device: Optional[torch.device] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> torch.Tensor:
+    cache_shape = (batch_size, num_heads, max_seq_length, head_size)
+    kv_cache = KeyValueCache(
+        key=torch.zeros(cache_shape, device=device, dtype=dtype),
+        value=torch.zeros(cache_shape, device=device, dtype=dtype),
+    )
+    return kv_cache
+
+
 class CausalSelfAttention(nn.Module):
     def __init__(
         self,
@@ -257,8 +279,8 @@ class CausalSelfAttention(nn.Module):
         max_seq_length: int,
         bias: bool = False,
         dropout_p: float = 0.0,
+        kv_cache: Optional[KeyValueCache] = None,
     ) -> None:
-
         super().__init__()
 
         if embedding_dim % num_heads != 0:
@@ -275,6 +297,8 @@ class CausalSelfAttention(nn.Module):
         self.embedding_dim = embedding_dim
         self.max_seq_length = max_seq_length
 
+        self.kv_cache = kv_cache
+
     def forward(
         self,
         x: torch.Tensor,
@@ -282,30 +306,43 @@ class CausalSelfAttention(nn.Module):
         mask: AttentionMask,
         max_seq_length: int,
         input_pos: Optional[torch.Tensor] = None,
-        kv_cache=None,
+        kv_cache: Optional[KeyValueCache] = None,
     ) -> torch.Tensor:
-        B, T, C = x.size()  # batch size, sequence length, embedding dimensionality (embedding_dim)
+        (
+            batch_size,
+            seq_length,
+            embedding_dim,
+        ) = x.size()  # batch size, sequence length, embedding dimensionality (embedding_dim)
+
+        if self.kv_cache is None:
+            head_size = self.embedding_dim // self.num_heads
+            self.kv_cache = create_key_value_cache(
+                batch_size=batch_size,
+                num_heads=self.num_heads,
+                max_seq_length=max_seq_length,
+                head_size=head_size,
+                device=x.device,
+                dtype=x.dtype,
+            )
 
         # calculate query, key, values for all heads in batch
         # and move head forward to be the batch dim
         q, k, v = self.c_attn(x).split(self.embedding_dim, dim=2)
 
-        head_size = C // self.num_heads
-        k = k.view(B, T, self.num_heads, head_size)
-        q = q.view(B, T, self.num_heads, head_size)
-        v = v.view(B, T, self.num_heads, head_size)
+        head_size = embedding_dim // self.num_heads
+        k = k.view(batch_size, seq_length, self.num_heads, head_size)
+        q = q.view(batch_size, seq_length, self.num_heads, head_size)
+        v = v.view(batch_size, seq_length, self.num_heads, head_size)
 
-        # q = apply_rope(q, rope)
-        # k = apply_rope(k, rope)
         q = rope(q, input_pos)
         k = rope(k, input_pos)
 
-        k = k.transpose(1, 2)  # (B, nh, T, hs)
-        q = q.transpose(1, 2)  # (B, nh, T, hs)
-        v = v.transpose(1, 2)  # (B, nh, T, hs)
+        k = k.transpose(1, 2)  # (B, nh, seq_length, hs)
+        q = q.transpose(1, 2)  # (B, nh, seq_length, hs)
+        v = v.transpose(1, 2)  # (B, nh, seq_length, hs)
 
-        if kv_cache is not None:
-            cache_k, cache_v = kv_cache
+        if self.kv_cache is not None:
+            cache_k, cache_v = astuple(self.kv_cache)
             # check if reached token limit
             if input_pos[-1] >= max_seq_length:
                 input_pos = torch.tensor(max_seq_length - 1, device=input_pos.device)
@@ -314,22 +351,16 @@ class CausalSelfAttention(nn.Module):
                 cache_v = torch.roll(cache_v, -1, dims=2)
             k = cache_k.index_copy(2, input_pos, k)
             v = cache_v.index_copy(2, input_pos, v)
-            kv_cache = k, v
-
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        #  att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        #  att = att.masked_fill(mask[:,:,:T,:T] == 0, float('-inf'))
-        #  att = F.softmax(att, dim=-1)
-        #  y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+            self.kv_cache = KeyValueCache(key=k, value=v)
 
         # efficient attention using Flash Attention CUDA kernels
         y = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
 
         y = (
-            y.transpose(1, 2).contiguous().view(B, T, C)
+            y.transpose(1, 2).contiguous().view(batch_size, seq_length, embedding_dim)
         )  # re-assemble all head outputs side by side
 
         # output projection
         y = self.c_proj(y)
 
-        return y, kv_cache
+        return y
