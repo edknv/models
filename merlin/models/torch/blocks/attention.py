@@ -177,10 +177,6 @@ class RotaryEmbeddings(nn.Module):
         self.base = base
 
         self.cache = None
-        self._is_initialized = False
-
-    def is_initialized(self) -> bool:
-        return self._is_initialized
 
     def initialize(
         self, device: Optional[torch.device] = None, dtype: Optional[torch.dtype] = None
@@ -202,10 +198,14 @@ class RotaryEmbeddings(nn.Module):
         self._is_initialized = True
 
     def forward(
-        self, inputs: torch.Tensor, positions: Optional[torch.Tensor] = None
+        self,
+        inputs: torch.Tensor,
+        positions: Optional[torch.Tensor] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> torch.Tensor:
-        if not self.is_initialized():
-            self.initialize()
+        if self.cache is None:
+            self.initialize(device=device, dtype=dtype)
 
         batch_size, seq_length, width, _ = inputs.size()
 
@@ -281,6 +281,7 @@ class CausalSelfAttention(nn.Module):
         bias: bool = False,
         dropout_p: float = 0.0,
         kv_cache: Optional[KeyValueCache] = None,
+        rotary_embeds: Optional[RotaryEmbeddings] = None,
     ) -> None:
         super().__init__()
 
@@ -295,6 +296,7 @@ class CausalSelfAttention(nn.Module):
         self.bias = bias
         self.dropout_p = dropout_p
         self.kv_cache = kv_cache
+        self.rotary_embeds = rotary_embeds
 
         # query, key, and value projections for all heads, but in a batch.
         self.qkv_projection = nn.Linear(embedding_dim, 3 * embedding_dim, bias=self.bias)
@@ -303,24 +305,17 @@ class CausalSelfAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        rope,
-        mask: AttentionMask,
-        max_seq_length: int,
-        input_pos: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KeyValueCache] = None,
+        positions: Optional[torch.Tensor] = None,
+        mask: Optional[AttentionMask] = None,
     ) -> torch.Tensor:
-        (
-            batch_size,
-            seq_length,
-            embedding_dim,
-        ) = x.size()
+        batch_size, seq_length, embedding_dim = x.size()
 
         if self.kv_cache is None:
             head_size = self.embedding_dim // self.num_heads
             self.kv_cache = create_key_value_cache(
                 batch_size=batch_size,
                 num_heads=self.num_heads,
-                max_seq_length=max_seq_length,
+                max_seq_length=self.max_seq_length,
                 head_size=head_size,
                 device=x.device,
                 dtype=x.dtype,
@@ -335,8 +330,9 @@ class CausalSelfAttention(nn.Module):
         q = q.view(batch_size, seq_length, self.num_heads, head_size)
         v = v.view(batch_size, seq_length, self.num_heads, head_size)
 
-        q = rope(q, input_pos)
-        k = rope(k, input_pos)
+        if self.rotary_embeds is not None:
+            q = self.rotary_embeds(q, positions)
+            k = self.rotary_embeds(k, positions)
 
         k = k.transpose(1, 2)
         q = q.transpose(1, 2)
@@ -345,13 +341,13 @@ class CausalSelfAttention(nn.Module):
         if self.kv_cache is not None:
             cache_k, cache_v = astuple(self.kv_cache)
             # check if reached token limit
-            if input_pos[-1] >= max_seq_length:
-                input_pos = torch.tensor(max_seq_length - 1, device=input_pos.device)
+            if positions[-1] >= self.max_seq_length:
+                positions = torch.tensor(max_seq_length - 1, device=positions.device)
                 # shift 1 position to the left
                 cache_k = torch.roll(cache_k, -1, dims=2)
                 cache_v = torch.roll(cache_v, -1, dims=2)
-            k = cache_k.index_copy(2, input_pos, k)
-            v = cache_v.index_copy(2, input_pos, v)
+            k = cache_k.index_copy(2, positions, k)
+            v = cache_v.index_copy(2, positions, v)
             self.kv_cache = KeyValueCache(key=k, value=v)
 
         # efficient attention using Flash Attention CUDA kernels

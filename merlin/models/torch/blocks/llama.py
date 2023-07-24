@@ -32,10 +32,10 @@ class LlamaConfig:
 
     @classmethod
     def from_name(cls, name: str) -> Self:
-        return cls(**llama_configs[name])
+        return cls(**LLAMA_CONFIGS[name])
 
 
-llama_configs = {
+LLAMA_CONFIGS = {
     "7B": dict(n_layer=32, n_head=32, n_embd=4096),
     "13B": dict(n_layer=40, n_head=40, n_embd=5120),
     "30B": dict(n_layer=60, n_head=52, n_embd=6656),
@@ -44,10 +44,13 @@ llama_configs = {
 
 
 class LlamaBlock(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
+    def __init__(self, config: LlamaConfig, max_seq_length: Optional[int] = None) -> None:
         super().__init__()
+
         assert config.padded_vocab_size is not None
+
         self.config = config
+        self.max_seq_length = max_seq_length or config.block_size
 
         self.transformer = LlamaTransformer(config)
         self.output_embeddings = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
@@ -58,7 +61,7 @@ class LlamaBlock(nn.Module):
         max_seq_length: Optional[int] = None,
         positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        outputs = self.transformer(inputs, max_seq_length=max_seq_length, positions=positions)
+        outputs = self.transformer(inputs, positions=positions)
         logits = self.output_embeddings(outputs)
         return logits
 
@@ -79,61 +82,57 @@ class LlamaBlock(nn.Module):
 
 
 class LlamaTransformer(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
+    def __init__(self, config: LlamaConfig, max_seq_length: Optional[int] = None) -> None:
         super().__init__()
         assert config.padded_vocab_size is not None
+
         self.config = config
+        self.max_seq_length = max_seq_length or config.block_size
+
+        self.rotary_embeds = RotaryEmbeddings(
+            self.config.n_embd // self.config.n_head,
+            self.config.block_size,
+        )
+        self.mask_cache = AttentionMask(create_attention_mask(max_seq_length=self.max_seq_length))
 
         self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.n_embd)
-        self.heads = nn.ModuleList(LlamaAttentionHead(config) for _ in range(config.n_layer))
+        self.heads = nn.ModuleList(
+            LlamaAttentionHead(
+                num_heads=config.n_head,
+                embedding_dim=config.n_embd,
+                max_seq_length=self.max_seq_length,
+                rotary_embeds=self.rotary_embeds,
+            )
+            for _ in range(config.n_layer)
+        )
         self.layernorm = RMSNorm(config.n_embd)
-
-        self.rotary_embeds: Optional[RotaryEmbeddings] = None
-        self.mask_cache: Optional[AttentionMask] = None
 
     def forward(
         self,
         inputs: torch.Tensor,
-        max_seq_length: Optional[int] = None,
         positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, seq_length = inputs.size()
-
-        block_size = self.config.block_size
-        if max_seq_length is None:
-            max_seq_length = block_size
-
-        if self.rotary_embeds is None:
-            self.rotary_embeds = RotaryEmbeddings(
-                self.config.n_embd // self.config.n_head,
-                self.config.block_size,
-            )
-
-        if self.mask_cache is None:
-            self.mask_cache = AttentionMask(
-                create_attention_mask(max_seq_length=max_seq_length, device=inputs.device)
-            )
 
         if positions is not None:
             mask = self.mask_cache.select_position(positions)
         else:
             mask = self.mask_cache.select(seq_length)
 
-        rope = self.rotary_embeds
-
         x = self.token_embeddings(inputs)
 
         if positions is None:
             for block in self.heads:
-                x = block(x, rope, mask, max_seq_length)
-        else:
-            for i, block in enumerate(self.heads):
                 x = block(
                     x,
-                    rope,
-                    mask,
-                    max_seq_length,
-                    positions,
+                    mask=mask,
+                )
+        else:
+            for head in self.heads:
+                x = head(
+                    x,
+                    positions=positions,
+                    mask=mask,
                 )
 
         x = self.layernorm(x)
@@ -146,31 +145,47 @@ class LlamaTransformer(nn.Module):
 
 
 class LlamaAttentionHead(nn.Module):
-    def __init__(self, config: LlamaConfig) -> None:
+    def __init__(
+        self,
+        num_heads: int,
+        embedding_dim: int,
+        max_seq_length: int,
+        rotary_embeds: Optional[RotaryEmbeddings] = None,
+    ) -> None:
         super().__init__()
 
-        self.input_layernorm = RMSNorm(config.n_embd)
-        self.attention = CausalSelfAttention(
-            num_heads=config.n_head,
-            embedding_dim=config.n_embd,
-            max_seq_length=config.block_size,
-        )
-        self.post_attention_layernorm = RMSNorm(config.n_embd)
+        self.num_heads = num_heads
+        self.embedding_dim = embedding_dim
+        self.max_seq_length = max_seq_length
+        self.max_seq_length = max_seq_length
+        self.rotary_embeds = rotary_embeds
 
-        hidden_dim = 4 * config.n_embd
+        self.input_layernorm = RMSNorm(self.embedding_dim)
+        self.attention = CausalSelfAttention(
+            num_heads=self.num_heads,
+            embedding_dim=self.embedding_dim,
+            max_seq_length=self.max_seq_length,
+            rotary_embeds=self.rotary_embeds,
+        )
+        self.post_attention_layernorm = RMSNorm(self.embedding_dim)
+
+        hidden_dim = 4 * self.embedding_dim
         n_hidden = int(2 * hidden_dim / 3)
         n_hidden = find_multiple(n_hidden, 256)
-        self.mlp = PositionwiseFeedForward(config.n_embd, n_hidden, bias=False, activation=nn.SiLU)
+        self.mlp = PositionwiseFeedForward(
+            self.embedding_dim, n_hidden, bias=False, activation=nn.SiLU
+        )
 
     def forward(
         self,
         x: torch.Tensor,
-        rope,
-        mask: Optional[AttentionMask],
-        max_seq_length: int,
         positions: Optional[torch.Tensor] = None,
+        mask: Optional[AttentionMask] = None,
     ) -> torch.Tensor:
-        h = self.attention(self.input_layernorm(x), rope, mask, max_seq_length, positions)
-        x = x + h
+        x = x + self.attention(
+            self.input_layernorm(x),
+            positions=positions,
+            mask=mask,
+        )
         x = x + self.mlp(self.post_attention_layernorm(x))
         return x
