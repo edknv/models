@@ -7,11 +7,8 @@ from tqdm import tqdm
 
 
 def llama_model_lookup(checkpoint: dict) -> str:
-    """Returns the LLaMA model name from the checkpoint.
-
-    Checks the width of the lm_head.weight matrix, as these uniquely identify the model.
-    """
-    embedding_size = checkpoint["transformer.wte.weight"].shape[1]
+    """Returns the LLaMA model name from the checkpoint."""
+    embedding_size = checkpoint["transformer.token_embeddings.weight"].shape[1]
     return llama_model_sizes[embedding_size]
 
 
@@ -19,48 +16,48 @@ def convert_state_dict(
     state_dict: Dict[str, torch.Tensor], dtype: torch.dtype = torch.float32
 ) -> Dict[str, torch.Tensor]:
     converted = {}
-    converted["transformer.wte.weight"] = state_dict["tok_embeddings.weight"].to(dtype)
-    converted["lm_head.weight"] = state_dict["output.weight"].to(dtype)
-    converted["transformer.ln_f.scale"] = state_dict["norm.weight"].to(dtype)
+    converted["transformer.token_embeddings.weight"] = state_dict["tok_embeddings.weight"].to(dtype)
+    converted["output_embeddings.weight"] = state_dict["output.weight"].to(dtype)
+    converted["transformer.layernorm.scale"] = state_dict["norm.weight"].to(dtype)
 
     for layer_idx in sorted(set([k.split(".")[1] for k in state_dict if k.startswith("layers")])):
         # attention
-        # the wq, wk, wv from the FB model are stacked in our model as c_attn
-        converted[f"transformer.h.{layer_idx}.attn.c_attn.weight"] = torch.cat(
+        # the wq, wk, wv from the FB model are stacked in our model.
+        converted[f"transformer.heads.{layer_idx}.attention.qkv_projection.weight"] = torch.cat(
             (
                 state_dict[f"layers.{layer_idx}.attention.wq.weight"].to(dtype),
                 state_dict[f"layers.{layer_idx}.attention.wk.weight"].to(dtype),
                 state_dict[f"layers.{layer_idx}.attention.wv.weight"].to(dtype),
             )
         )
-        converted[f"transformer.h.{layer_idx}.attn.c_proj.weight"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.attention.output_projection.weight"] = state_dict[
             f"layers.{layer_idx}.attention.wo.weight"
         ].to(dtype)
         # mlp
-        converted[f"transformer.h.{layer_idx}.mlp.weights_1.weight"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.mlp.weights_1.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w1.weight"
         ].to(dtype)
-        converted[f"transformer.h.{layer_idx}.mlp.projection.weight"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.mlp.projection.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w2.weight"
         ].to(dtype)
-        converted[f"transformer.h.{layer_idx}.mlp.weights_2.weight"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.mlp.weights_2.weight"] = state_dict[
             f"layers.{layer_idx}.feed_forward.w3.weight"
         ].to(dtype)
         # rms norm
-        converted[f"transformer.h.{layer_idx}.rms_1.scale"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.input_layernorm.scale"] = state_dict[
             f"layers.{layer_idx}.attention_norm.weight"
         ].to(dtype)
-        converted[f"transformer.h.{layer_idx}.rms_2.scale"] = state_dict[
+        converted[f"transformer.heads.{layer_idx}.post_attention_layernorm.scale"] = state_dict[
             f"layers.{layer_idx}.ffn_norm.weight"
         ].to(dtype)
     return converted
 
 
 shard_dims = {
-    "lm_head.weight": 0,
-    "wte.weight": 1,
-    "attn.c_attn.weight": 0,
-    "attn.c_proj.weight": 1,
+    "output_embeddings.weight": 0,
+    "token_embeddings.weight": 1,
+    "attention.qkv_projection.weight": 0,
+    "attention.output_projection.weight": 1,
     "mlp.weights_1.weight": 0,
     "mlp.weights_2.weight": 0,
     "mlp.projection.weight": 1,
@@ -74,9 +71,6 @@ def convert_checkpoint(
 ) -> None:
     if isinstance(checkpoint_dir, str):
         checkpoint_dir = Path(checkpoint_dir)
-    # checkpoint_dir = checkpoint_dir / model_size
-
-    # the tokenizer is the same for all model sizes, so we store it in the parent dir
 
     dt = getattr(torch, dtype, None)
     if not isinstance(dt, torch.dtype):
@@ -89,7 +83,8 @@ def convert_checkpoint(
 
     if n_checkpoints == 0:
         raise RuntimeError(
-            f"No checkpoints were found at checkpoint_dir {checkpoint_dir}. `consolidated.0*.pth` files expected at that location."
+            f"No checkpoints were found at checkpoint_dir {checkpoint_dir}."
+            " `consolidated.0*.pth` files expected at that location."
         )
 
     # for the bigger models, there are multiple model-parallel checkpoints
@@ -108,8 +103,6 @@ def convert_checkpoint(
                     dim = d
                     break
             if dim is None:
-                # Extra check: assert that tensors are the same if not sharded
-                # assert torch.allclose(combined[name], param)
                 continue
             combined[name] = torch.cat((combined[name], param), dim=dim)
 
@@ -120,8 +113,6 @@ def convert_checkpoint(
     for name, param in combined.items():
         if "c_attn" not in name:
             continue
-
-        # Turn [Q1, K1, V1, Q2, K2, V2, ...] into [Q1, Q2, ..., K1, K2, .., V1, V2, ...]
 
         src_chunk_len = param.shape[0] // n_checkpoints
         mat_len = src_chunk_len // 3

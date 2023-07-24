@@ -193,6 +193,7 @@ class RotaryEmbeddings(nn.Module):
         position = torch.arange(self.max_seq_length, dtype=dtype, device=device)
         freq = torch.outer(position, self.inverse_freq).float()
         cache = torch.stack([torch.cos(freq), torch.sin(freq)], dim=-1)
+
         # this is to mimic the behaviour of complex32, else we will get different results
         if dtype in (torch.float16, torch.bfloat16, torch.int8):
             cache = cache.half()
@@ -288,16 +289,16 @@ class CausalSelfAttention(nn.Module):
                 "The embedding dimension must be divible by the number of self-attention heads"
             )
 
-        # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
-        # output projection
-        self.c_proj = nn.Linear(embedding_dim, embedding_dim, bias=False)
-
         self.num_heads = num_heads
         self.embedding_dim = embedding_dim
         self.max_seq_length = max_seq_length
-
+        self.bias = bias
+        self.dropout_p = dropout_p
         self.kv_cache = kv_cache
+
+        # query, key, and value projections for all heads, but in a batch.
+        self.qkv_projection = nn.Linear(embedding_dim, 3 * embedding_dim, bias=self.bias)
+        self.output_projection = nn.Linear(embedding_dim, embedding_dim, bias=self.bias)
 
     def forward(
         self,
@@ -312,7 +313,7 @@ class CausalSelfAttention(nn.Module):
             batch_size,
             seq_length,
             embedding_dim,
-        ) = x.size()  # batch size, sequence length, embedding dimensionality (embedding_dim)
+        ) = x.size()
 
         if self.kv_cache is None:
             head_size = self.embedding_dim // self.num_heads
@@ -327,7 +328,7 @@ class CausalSelfAttention(nn.Module):
 
         # calculate query, key, values for all heads in batch
         # and move head forward to be the batch dim
-        q, k, v = self.c_attn(x).split(self.embedding_dim, dim=2)
+        q, k, v = self.qkv_projection(x).split(self.embedding_dim, dim=2)
 
         head_size = embedding_dim // self.num_heads
         k = k.view(batch_size, seq_length, self.num_heads, head_size)
@@ -337,9 +338,9 @@ class CausalSelfAttention(nn.Module):
         q = rope(q, input_pos)
         k = rope(k, input_pos)
 
-        k = k.transpose(1, 2)  # (B, nh, seq_length, hs)
-        q = q.transpose(1, 2)  # (B, nh, seq_length, hs)
-        v = v.transpose(1, 2)  # (B, nh, seq_length, hs)
+        k = k.transpose(1, 2)
+        q = q.transpose(1, 2)
+        v = v.transpose(1, 2)
 
         if self.kv_cache is not None:
             cache_k, cache_v = astuple(self.kv_cache)
@@ -354,13 +355,12 @@ class CausalSelfAttention(nn.Module):
             self.kv_cache = KeyValueCache(key=k, value=v)
 
         # efficient attention using Flash Attention CUDA kernels
-        y = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
+        y = nn.functional.scaled_dot_product_attention(
+            q, k, v, attn_mask=mask, dropout_p=self.dropout_p
+        )
 
-        y = (
-            y.transpose(1, 2).contiguous().view(batch_size, seq_length, embedding_dim)
-        )  # re-assemble all head outputs side by side
+        y = y.transpose(1, 2).contiguous().view(batch_size, seq_length, embedding_dim)
 
-        # output projection
-        y = self.c_proj(y)
+        y = self.output_projection(y)
 
         return y

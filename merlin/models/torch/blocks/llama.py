@@ -1,8 +1,3 @@
-"""Full definition of a Llama Language Model, all of it in this single file.
-
-Based on the nanoGPT implementation: https://github.com/karpathy/nanoGPT.
-"""
-# mypy: ignore-errors
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, TypeVar, Union
 
@@ -12,7 +7,6 @@ import torch.nn as nn
 from merlin.models.torch.blocks.attention import (
     AttentionMask,
     CausalSelfAttention,
-    KeyValueCache,
     RotaryEmbeddings,
     create_attention_mask,
 )
@@ -26,7 +20,7 @@ Self = TypeVar("Self", bound="LlamaBlock")
 @dataclass
 class LlamaConfig:
     block_size: int = 2048
-    vocab_size: int = 32000
+    vocab_size: int = 32_000
     padded_vocab_size: Optional[int] = None
     n_layer: int = 32
     n_head: int = 32
@@ -56,7 +50,7 @@ class LlamaBlock(nn.Module):
         self.config = config
 
         self.transformer = LlamaTransformer(config)
-        self.lm_head = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
+        self.output_embeddings = nn.Linear(config.n_embd, config.padded_vocab_size, bias=False)
 
     def forward(
         self,
@@ -65,7 +59,7 @@ class LlamaBlock(nn.Module):
         positions: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         outputs = self.transformer(inputs, max_seq_length=max_seq_length, positions=positions)
-        logits = self.lm_head(outputs)
+        logits = self.output_embeddings(outputs)
         return logits
 
     @classmethod
@@ -80,8 +74,7 @@ class LlamaBlock(nn.Module):
         return model
 
     def reset_cache(self) -> None:
-        # self.transformer.kv_caches.clear()
-        for head in self.transformer.h:
+        for head in self.transformer.heads:
             head.kv_cache = None
 
 
@@ -91,9 +84,9 @@ class LlamaTransformer(nn.Module):
         assert config.padded_vocab_size is not None
         self.config = config
 
-        self.wte = nn.Embedding(config.padded_vocab_size, config.n_embd)
-        self.h = nn.ModuleList(LlamaAttentionHead(config) for _ in range(config.n_layer))
-        self.ln_f = RMSNorm(config.n_embd)
+        self.token_embeddings = nn.Embedding(config.padded_vocab_size, config.n_embd)
+        self.heads = nn.ModuleList(LlamaAttentionHead(config) for _ in range(config.n_layer))
+        self.layernorm = RMSNorm(config.n_embd)
 
         self.rotary_embeds: Optional[RotaryEmbeddings] = None
         self.mask_cache: Optional[AttentionMask] = None
@@ -122,31 +115,28 @@ class LlamaTransformer(nn.Module):
             )
 
         if positions is not None:
-            # mask = self.mask_cache.index_select(2, positions)
-            # mask = mask[:, :, :, :max_seq_length]
             mask = self.mask_cache.select_position(positions)
         else:
             mask = self.mask_cache.select(seq_length)
 
         rope = self.rotary_embeds
 
-        # forward the model itself
-        x = self.wte(inputs)  # token embeddings of shape (b, t, n_embd)
+        x = self.token_embeddings(inputs)
 
-        if positions is None:  # proxy for use_cache=False
-            for block in self.h:
-                x, _ = block(x, rope, mask, max_seq_length)
+        if positions is None:
+            for block in self.heads:
+                x = block(x, rope, mask, max_seq_length)
         else:
-            for i, block in enumerate(self.h):
+            for i, block in enumerate(self.heads):
                 x = block(
                     x,
                     rope,
                     mask,
                     max_seq_length,
-                    positions,  # self.kv_caches[i]
+                    positions,
                 )
 
-        x = self.ln_f(x)
+        x = self.layernorm(x)
 
         return x
 
@@ -159,13 +149,13 @@ class LlamaAttentionHead(nn.Module):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__()
 
-        self.rms_1 = RMSNorm(config.n_embd)
-        self.attn = CausalSelfAttention(
+        self.input_layernorm = RMSNorm(config.n_embd)
+        self.attention = CausalSelfAttention(
             num_heads=config.n_head,
             embedding_dim=config.n_embd,
             max_seq_length=config.block_size,
         )
-        self.rms_2 = RMSNorm(config.n_embd)
+        self.post_attention_layernorm = RMSNorm(config.n_embd)
 
         hidden_dim = 4 * config.n_embd
         n_hidden = int(2 * hidden_dim / 3)
@@ -179,9 +169,8 @@ class LlamaAttentionHead(nn.Module):
         mask: Optional[AttentionMask],
         max_seq_length: int,
         positions: Optional[torch.Tensor] = None,
-        # kv_cache: Optional[KVCache] = None,
     ) -> torch.Tensor:
-        h = self.attn(self.rms_1(x), rope, mask, max_seq_length, positions)  # , kv_cache)
+        h = self.attention(self.input_layernorm(x), rope, mask, max_seq_length, positions)
         x = x + h
-        x = x + self.mlp(self.rms_2(x))
+        x = x + self.mlp(self.post_attention_layernorm(x))
         return x
