@@ -1,5 +1,5 @@
 from copy import deepcopy
-from dataclasses import astuple, dataclass
+from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
 import torch
@@ -228,7 +228,7 @@ class RotaryEmbeddings(nn.Module):
 
 
 class AttentionMask:
-    def __init__(self, bool_mask: Optional[torch.Tensor] = None) -> None:
+    def __init__(self, bool_mask: torch.Tensor) -> None:
         self.bool_mask = bool_mask
 
     def select(self, seq_length: int) -> torch.Tensor:
@@ -306,7 +306,7 @@ class CausalSelfAttention(nn.Module):
         self,
         x: torch.Tensor,
         positions: Optional[torch.Tensor] = None,
-        mask: Optional[AttentionMask] = None,
+        mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, seq_length, embedding_dim = x.size()
 
@@ -338,8 +338,8 @@ class CausalSelfAttention(nn.Module):
         q = q.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        if self.kv_cache is not None:
-            cache_k, cache_v = astuple(self.kv_cache)
+        if self.kv_cache is not None and positions is not None:
+            cache_k, cache_v = self.kv_cache.key, self.kv_cache.value
             # check if reached token limit
             if positions[-1] >= self.max_seq_length:
                 positions = torch.tensor(self.max_seq_length - 1, device=positions.device)

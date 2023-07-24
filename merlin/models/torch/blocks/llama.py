@@ -79,7 +79,7 @@ class LlamaBlock(Block):
     ):
         if isinstance(inputs, torch.Tensor):
             tokens, positions = inputs, None
-        elif isinstance(inputs, dict):
+        else:
             tokens, positions = self.get_tokens(inputs), self.get_positions(inputs)
 
         outputs = self.transformer(tokens, positions=positions)
@@ -111,7 +111,7 @@ class LlamaBlock(Block):
         return inputs[self.position_key]
 
 
-class LlamaTransformer(Block):
+class LlamaTransformer(nn.Module):
     def __init__(
         self,
         config: LlamaConfig,
@@ -205,7 +205,7 @@ class LlamaAttentionHead(nn.Module):
         self,
         x: torch.Tensor,
         positions: Optional[torch.Tensor] = None,
-        mask: Optional[AttentionMask] = None,
+        mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         x = x + self.attention(
             self.input_layernorm(x),
