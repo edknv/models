@@ -75,7 +75,7 @@ class TestPositionwiseFeedForward:
         mlp = PositionwiseFeedForward(32)
         inputs = torch.randn(16, 32)
         outputs = mlp(inputs)
-        assert outputs.size() == torch.Size([16, 32])
+        assert inputs.size() == outputs.size()
 
     def test_hidden_layer(self):
         hidden_dim = 256
