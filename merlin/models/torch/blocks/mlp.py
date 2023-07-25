@@ -4,9 +4,11 @@ import torch
 from torch import nn
 
 from merlin.models.torch.block import Block
+from merlin.models.torch.blocks.attention import _TRANSFORMER_REF
 from merlin.models.torch.schema import Schema, output_schema
 from merlin.models.torch.transforms.agg import Concat, MaybeAgg
 from merlin.models.torch.utils.llama_utils import find_multiple
+from merlin.models.utils.doc_utils import docstring_parameter
 
 
 class MLPBlock(Block):
@@ -85,11 +87,13 @@ class MLPBlock(Block):
         super().__init__(*modules)
 
 
+@docstring_parameter(transformer_ref=_TRANSFORMER_REF)
 class PositionwiseFeedForward(nn.Module):
-    """Position-wise Feed-Forward network as proposed in [1]
+    """Position-wise Feed-Forward network as proposed in Section 3.3 of [1].
+
     References
     ----------
-    [1] Position-wise Feed-Forward
+    {transformer_ref}
     """
 
     def __init__(

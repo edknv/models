@@ -1,5 +1,4 @@
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
 import torch
@@ -7,6 +6,16 @@ from torch import nn
 
 from merlin.models.torch.batch import Batch
 from merlin.models.torch.block import Block
+from merlin.models.utils.doc_utils import docstring_parameter
+
+_ROPE_REF = """
+    ..  [1] Su, et al., "RoFormer: Enhanced Transformer with Rotary Position Embedding".
+        arXiv preprint arXiv:2104.09864 (2021).
+"""
+_TRANSFORMER_REF = """
+    ..  [1] Vaswani, et al., "Attention Is All You Need".
+        arXiv preprint arXiv:1706.03762 (2017).
+"""
 
 
 class CrossAttentionBlock(Block):
@@ -169,7 +178,14 @@ class CrossAttentionBlock(Block):
         return x[self.seq_key]
 
 
+@docstring_parameter(rope_reference=_ROPE_REF)
 class RotaryEmbeddings(nn.Module):
+    """
+    References
+    ----------
+    {rope_reference}
+    """
+
     def __init__(self, dim: int, max_seq_length: int, base: int = 10000) -> None:
         super().__init__()
         self.max_seq_length = max_seq_length
@@ -288,7 +304,18 @@ class KeyValueCache:
         return key, value
 
 
+@docstring_parameter(
+    transformer_reference=_TRANSFORMER_REF, rope_reference=_ROPE_REF.replace("[1]", "[2]")
+)
 class CausalSelfAttention(nn.Module):
+    """
+
+    References
+    ----------
+    {transformer_reference}
+    {rope_reference}
+    """
+
     def __init__(
         self,
         num_heads: int,

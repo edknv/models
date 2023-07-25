@@ -19,8 +19,14 @@ from merlin.models.torch.utils.llama_utils import (
     find_multiple,
     llama_model_lookup,
 )
+from merlin.models.utils.doc_utils import docstring_parameter
 
 Self = TypeVar("Self", bound="LlamaBlock")
+
+_LLAMA_REF = """
+    ..  [1] Touvron, et al., "LLaMA: Open and Efficient Foundation Language Models".
+        arXiv preprint arXiv:2302.13971 (2023).
+"""
 
 
 @dataclass
@@ -88,7 +94,14 @@ class _LlamaBaseBlock(Block):
         return inputs.get(self.position_key)
 
 
+@docstring_parameter(llama_reference=_LLAMA_REF)
 class LlamaBlock(_LlamaBaseBlock):
+    """
+    References
+    ----------
+    {llama_reference}
+    """
+
     def __init__(
         self,
         config: LlamaConfig,
