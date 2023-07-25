@@ -227,6 +227,7 @@ class RotaryEmbeddings(nn.Module):
         return outputs.flatten(3).type_as(inputs)
 
 
+@torch.jit.script
 class AttentionMask:
     def __init__(self, bool_mask: torch.Tensor) -> None:
         self.bool_mask = bool_mask
@@ -306,7 +307,7 @@ class CausalSelfAttention(nn.Module):
         self,
         x: torch.Tensor,
         positions: Optional[torch.Tensor] = None,
-        mask: Optional[torch.Tensor] = None,
+        mask: Optional[AttentionMask] = None,
     ) -> torch.Tensor:
         batch_size, seq_length, embedding_dim = x.size()
 
@@ -350,9 +351,16 @@ class CausalSelfAttention(nn.Module):
             v = cache_v.index_copy(2, positions, v)
             self.kv_cache = KeyValueCache(key=k, value=v)
 
+        if mask is not None:
+            attn_mask = (
+                mask.select(seq_length) if positions is None else mask.select_position(positions)
+            )
+        else:
+            attn_mask = None
+
         # efficient attention using Flash Attention CUDA kernels
         y = nn.functional.scaled_dot_product_attention(
-            q, k, v, attn_mask=mask, dropout_p=self.dropout_p
+            q, k, v, attn_mask=attn_mask, dropout_p=self.dropout_p
         )
 
         y = y.transpose(1, 2).contiguous().view(batch_size, seq_length, embedding_dim)

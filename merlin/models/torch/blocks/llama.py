@@ -160,18 +160,13 @@ class LlamaTransformer(_LlamaBaseBlock):
 
         batch_size, seq_length = tokens.size()
 
-        if positions is not None:
-            mask = self.mask_cache.select_position(positions)
-        else:
-            mask = self.mask_cache.select(seq_length)
-
         x = self.token_embeddings(tokens)
 
         for head in self.heads:
             x = head(
                 x,
                 positions=positions,
-                mask=mask,
+                mask=self.mask_cache,
             )
 
         x = self.layernorm(x)
@@ -209,7 +204,7 @@ class LlamaAttentionHead(nn.Module):
         self,
         x: torch.Tensor,
         positions: Optional[torch.Tensor] = None,
-        mask: Optional[torch.Tensor] = None,
+        mask: Optional[AttentionMask] = None,
     ) -> torch.Tensor:
         x = x + self.attention(
             self.input_layernorm(x),
