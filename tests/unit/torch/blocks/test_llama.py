@@ -1,8 +1,8 @@
 import torch
 
 import merlin.models.torch as mm
-from merlin.models.torch.utils import module_utils
 from merlin.models.torch.blocks.llama import LlamaTransformer
+from merlin.models.torch.utils import module_utils
 
 
 class TestLlamaBlock:

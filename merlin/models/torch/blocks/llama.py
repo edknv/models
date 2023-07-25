@@ -49,7 +49,7 @@ LLAMA_CONFIGS = {
 }
 
 
-class LlamaBlock(Block):
+class _LlamaBaseBlock(Block):
     def __init__(
         self,
         config: LlamaConfig,
@@ -63,28 +63,6 @@ class LlamaBlock(Block):
         self.config = config
         self.token_key = token_key or "token"
         self.position_key = position_key or "position"
-
-        self.transformer = LlamaTransformer(config)
-        self.output_embeddings = nn.Linear(
-            config.embedding_dim, config.padded_vocab_size, bias=False
-        )
-
-    # def forward(
-    #    self,
-    #    inputs: torch.Tensor,
-    #    positions: Optional[torch.Tensor] = None,
-    # ) -> torch.Tensor:
-    def forward(
-        self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None
-    ):
-        if isinstance(inputs, torch.Tensor):
-            tokens, positions = inputs, None
-        else:
-            tokens, positions = self.get_tokens(inputs), self.get_positions(inputs)
-
-        outputs = self.transformer(tokens, positions=positions)
-        logits = self.output_embeddings(outputs)
-        return logits
 
     @classmethod
     def from_name(cls, model_size: str) -> Self:
@@ -101,8 +79,7 @@ class LlamaBlock(Block):
         return model
 
     def reset_cache(self) -> None:
-        for head in self.transformer.heads:
-            head.kv_cache = None
+        raise NotImplementedError
 
     def get_tokens(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
         return inputs[self.token_key]
@@ -111,14 +88,47 @@ class LlamaBlock(Block):
         return inputs.get(self.position_key)
 
 
-class LlamaTransformer(nn.Module):
+class LlamaBlock(_LlamaBaseBlock):
     def __init__(
         self,
         config: LlamaConfig,
+        token_key: Optional[str] = None,
+        position_key: Optional[str] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            config=config,
+            token_key=token_key,
+            position_key=position_key,
+        )
+        self.transformer = LlamaTransformer(config)
+        self.output_embeddings = nn.Linear(
+            config.embedding_dim, config.padded_vocab_size, bias=False
+        )
 
-        self.config = config
+    def forward(
+        self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None
+    ):
+        outputs = self.transformer(inputs)
+        logits = self.output_embeddings(outputs)
+        return logits
+
+    def reset_cache(self) -> None:
+        for head in self.transformer.heads:
+            head.kv_cache = None
+
+
+class LlamaTransformer(_LlamaBaseBlock):
+    def __init__(
+        self,
+        config: LlamaConfig,
+        token_key: Optional[str] = None,
+        position_key: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            config=config,
+            token_key=token_key,
+            position_key=position_key,
+        )
 
         self.rotary_embeds = RotaryEmbeddings(
             self.config.embedding_dim // self.config.num_heads,
@@ -141,10 +151,13 @@ class LlamaTransformer(nn.Module):
         self.layernorm = RMSNorm(config.embedding_dim)
 
     def forward(
-        self,
-        tokens: torch.Tensor,
-        positions: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        self, inputs: Union[torch.Tensor, Dict[str, torch.Tensor]], batch: Optional[Batch] = None
+    ):
+        if isinstance(inputs, torch.Tensor):
+            tokens, positions = inputs, None
+        else:
+            tokens, positions = self.get_tokens(inputs), self.get_positions(inputs)
+
         batch_size, seq_length = tokens.size()
 
         if positions is not None:
@@ -164,10 +177,6 @@ class LlamaTransformer(nn.Module):
         x = self.layernorm(x)
 
         return x
-
-    @classmethod
-    def from_name(cls, model_size: str) -> Self:
-        return cls(LlamaConfig.from_name(model_size))
 
 
 class LlamaAttentionHead(nn.Module):
