@@ -251,26 +251,41 @@ def create_attention_mask(
 
 
 @torch.jit.script
-@dataclass
 class KeyValueCache:
-    key: torch.Tensor
-    value: torch.Tensor
+    def __init__(
+        self,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        self.key = key
+        self.value = value
 
+    def cache(
+        self,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        positions: torch.Tensor,
+        dim: int = -2,
+        max_seq_length: Optional[int] = None,
+    ):
+        if max_seq_length is None:
+            max_seq_length = key.size(dim)
 
-def create_key_value_cache(
-    batch_size: int,
-    num_heads: int,
-    max_seq_length: int,
-    head_size: int,
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> torch.Tensor:
-    cache_shape = (batch_size, num_heads, max_seq_length, head_size)
-    kv_cache = KeyValueCache(
-        key=torch.zeros(cache_shape, device=device, dtype=dtype),
-        value=torch.zeros(cache_shape, device=device, dtype=dtype),
-    )
-    return kv_cache
+        cached_key, cached_value = self.key, self.value
+        # check if reached token limit
+        if positions[-1] >= max_seq_length:
+            positions = torch.tensor(max_seq_length - 1, device=positions.device)
+            # shift 1 position to the left
+            cached_key = torch.roll(cached_key, -1, dims=dim)
+            cached_value = torch.roll(cached_value, -1, dims=dim)
+        key = cached_key.index_copy(dim, positions, key)
+        value = cached_value.index_copy(dim, positions, value)
+
+        self.key, self.value = key, value
+
+        return key, value
 
 
 class CausalSelfAttention(nn.Module):
@@ -281,6 +296,7 @@ class CausalSelfAttention(nn.Module):
         max_seq_length: int,
         bias: bool = False,
         dropout_p: float = 0.0,
+        store_cache: bool = True,
         kv_cache: Optional[KeyValueCache] = None,
         rotary_embeds: Optional[RotaryEmbeddings] = None,
     ) -> None:
@@ -296,6 +312,7 @@ class CausalSelfAttention(nn.Module):
         self.max_seq_length = max_seq_length
         self.bias = bias
         self.dropout_p = dropout_p
+        self.store_cache = store_cache
         self.kv_cache = kv_cache
         self.rotary_embeds = rotary_embeds
 
@@ -311,15 +328,12 @@ class CausalSelfAttention(nn.Module):
     ) -> torch.Tensor:
         batch_size, seq_length, embedding_dim = x.size()
 
-        if self.kv_cache is None:
+        if self.store_cache and self.kv_cache is None:
             head_size = self.embedding_dim // self.num_heads
-            self.kv_cache = create_key_value_cache(
-                batch_size=batch_size,
-                num_heads=self.num_heads,
-                max_seq_length=self.max_seq_length,
-                head_size=head_size,
-                device=x.device,
-                dtype=x.dtype,
+            cache_shape = (batch_size, self.num_heads, self.max_seq_length, head_size)
+            self.kv_cache = KeyValueCache(
+                key=torch.zeros(cache_shape, device=x.device, dtype=x.dtype),
+                value=torch.zeros(cache_shape, device=x.device, dtype=x.dtype),
             )
 
         # calculate query, key, values for all heads in batch
@@ -340,21 +354,18 @@ class CausalSelfAttention(nn.Module):
         v = v.transpose(1, 2)
 
         if self.kv_cache is not None and positions is not None:
-            cache_k, cache_v = self.kv_cache.key, self.kv_cache.value
-            # check if reached token limit
-            if positions[-1] >= self.max_seq_length:
-                positions = torch.tensor(self.max_seq_length - 1, device=positions.device)
-                # shift 1 position to the left
-                cache_k = torch.roll(cache_k, -1, dims=2)
-                cache_v = torch.roll(cache_v, -1, dims=2)
-            k = cache_k.index_copy(2, positions, k)
-            v = cache_v.index_copy(2, positions, v)
-            self.kv_cache = KeyValueCache(key=k, value=v)
+            k, v = self.kv_cache.cache(
+                key=k,
+                value=v,
+                positions=positions,
+                max_seq_length=self.max_seq_length,
+            )
 
         if mask is not None:
-            attn_mask = (
-                mask.select(seq_length) if positions is None else mask.select_position(positions)
-            )
+            if positions is not None:
+                attn_mask = mask.select_position(positions)
+            else:
+                attn_mask = mask.select(seq_length)
         else:
             attn_mask = None
 
