@@ -203,12 +203,7 @@ class LlamaAttentionHead(nn.Module):
         )
         self.post_attention_layernorm = RMSNorm(self.embedding_dim)
 
-        hidden_dim = 4 * self.embedding_dim
-        n_hidden = int(2 * hidden_dim / 3)
-        n_hidden = find_multiple(n_hidden, 256)
-        self.mlp = PositionwiseFeedForward(
-            self.embedding_dim, n_hidden, bias=False, activation=nn.SiLU
-        )
+        self.mlp = PositionwiseFeedForward(self.embedding_dim, bias=False, activation=nn.SiLU)
 
     def forward(
         self,

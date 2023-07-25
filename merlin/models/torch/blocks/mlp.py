@@ -6,6 +6,7 @@ from torch import nn
 from merlin.models.torch.block import Block
 from merlin.models.torch.schema import Schema, output_schema
 from merlin.models.torch.transforms.agg import Concat, MaybeAgg
+from merlin.models.torch.utils.llama_utils import find_multiple
 
 
 class MLPBlock(Block):
@@ -93,17 +94,22 @@ class PositionwiseFeedForward(nn.Module):
 
     def __init__(
         self,
-        input_dim: int,
-        intermediate_dim: int,
+        embedding_dim: int,
+        intermediate_dim: Optional[int] = None,
         bias: bool = False,
         activation=nn.ReLU,
     ):
         super().__init__()
-        self.weights_1 = nn.Linear(input_dim, intermediate_dim, bias=bias)
-        self.weights_2 = nn.Linear(input_dim, intermediate_dim, bias=bias)
-        self.projection = nn.Linear(intermediate_dim, input_dim, bias=bias)
-        if activation is not None:
-            self.activation = activation if isinstance(activation, nn.Module) else activation()
+
+        if intermediate_dim is None:
+            hidden_dim = 4 * embedding_dim
+            intermediate_dim = int(2 * hidden_dim / 3)
+            intermediate_dim = find_multiple(intermediate_dim, 256)
+
+        self.weights_1 = nn.Linear(embedding_dim, intermediate_dim, bias=bias)
+        self.weights_2 = nn.Linear(embedding_dim, intermediate_dim, bias=bias)
+        self.projection = nn.Linear(intermediate_dim, embedding_dim, bias=bias)
+        self.activation = activation if isinstance(activation, nn.Module) else activation()
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         outputs = self.projection(self.activation(self.weights_1(inputs)) * self.weights_2(inputs))
