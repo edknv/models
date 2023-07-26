@@ -74,16 +74,6 @@ class _LlamaBaseBlock(Block):
     def from_name(cls, model_size: str) -> Self:
         return cls(LlamaConfig.from_name(model_size))
 
-    @classmethod
-    def from_checkpoint(
-        cls, checkpoint_dir, model_size: Optional[str] = None, device=None, dtype=None
-    ):
-        state_dict = convert_checkpoint(checkpoint_dir, model_size)
-        model_size = model_size or llama_model_lookup(state_dict)
-        model = cls.from_name(model_size)
-        model.load_state_dict(state_dict)
-        return model
-
     def reset_cache(self) -> None:
         raise NotImplementedError
 
@@ -96,7 +86,8 @@ class _LlamaBaseBlock(Block):
 
 @docstring_parameter(llama_reference=_LLAMA_REF)
 class LlamaBlock(_LlamaBaseBlock):
-    """
+    """Llama-2 [1]
+
     References
     ----------
     {llama_reference}
@@ -125,9 +116,23 @@ class LlamaBlock(_LlamaBaseBlock):
         logits = self.output_embeddings(outputs)
         return logits
 
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_dir,
+        model_size: Optional[str] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        state_dict = convert_checkpoint(checkpoint_dir, model_size)
+        model_size = model_size or llama_model_lookup(state_dict)
+        model = cls.from_name(model_size)
+        model.load_state_dict(state_dict)
+        return model
+
     def reset_cache(self) -> None:
         for head in self.transformer.heads:
-            head.kv_cache = None
+            head.attention.kv_cache = None
 
 
 class LlamaTransformer(_LlamaBaseBlock):
@@ -185,6 +190,10 @@ class LlamaTransformer(_LlamaBaseBlock):
         x = self.layernorm(x)
 
         return x
+
+    def reset_cache(self) -> None:
+        for head in self.heads:
+            head.attention.kv_cache = None
 
 
 class LlamaAttentionHead(nn.Module):

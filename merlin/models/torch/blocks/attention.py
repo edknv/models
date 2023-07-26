@@ -180,7 +180,8 @@ class CrossAttentionBlock(Block):
 
 @docstring_parameter(rope_reference=_ROPE_REF)
 class RotaryEmbeddings(nn.Module):
-    """
+    """Rotary Position Embedding (RoPE) as proposed in [1].
+
     References
     ----------
     {rope_reference}
@@ -308,7 +309,12 @@ class KeyValueCache:
     transformer_reference=_TRANSFORMER_REF, rope_reference=_ROPE_REF.replace("[1]", "[2]")
 )
 class CausalSelfAttention(nn.Module):
-    """
+    """Transformer self-attention [1].
+
+    The key difference between our implementation and PyTorch implemention,
+    i.e., ``torch.nn.MultiheadAttention`` is that Rotary Position Embedding [2]
+    is applied to the key and query matrices. ``torch.nn.MultiheadAttention``
+    is currently too rigid to support such variation.
 
     References
     ----------
